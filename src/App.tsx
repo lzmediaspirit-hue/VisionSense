@@ -8,6 +8,8 @@ import { DesiredRealityFormScreen } from "./screens/DesiredRealityFormScreen";
 import { HabitFormScreen } from "./screens/HabitFormScreen";
 import { EvidenceScreen } from "./screens/EvidenceScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import { NudgesScreen } from "./screens/NudgesScreen";
+import { ExerciseRunnerScreen } from "./screens/ExerciseRunnerScreen";
 
 export default function App() {
   return (
@@ -26,6 +28,8 @@ export default function App() {
           element={<HabitFormScreen />}
         />
         <Route path="/evidence" element={<EvidenceScreen />} />
+        <Route path="/nudges" element={<NudgesScreen />} />
+        <Route path="/exercises/:slug" element={<ExerciseRunnerScreen />} />
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Route>

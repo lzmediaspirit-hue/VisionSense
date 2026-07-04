@@ -43,7 +43,12 @@ export const strings = {
     keepAriaPrefix: "Mark kept:",
     notTodayAriaPrefix: "Set aside for today:",
     nudgesPreviewHeading: "Mental nudges",
+    nudgesPreviewEmpty: "Nothing open right now.",
     seeAll: "See all",
+    exerciseCtaTitle: "Feel the pull of an old frequency?",
+    exerciseCtaBody:
+      "Try Polarity Transmutation: name it, then gather evidence its opposite is already here.",
+    exerciseCtaButton: "Begin Polarity Transmutation",
   },
 
   goals: {
@@ -130,6 +135,11 @@ export const strings = {
     savedBody: "Awareness is how the shift begins.",
     done: "Return to Today",
     baseStateRequired: "Name your state to continue.",
+    exerciseOfferTitle: "Want to go a layer deeper?",
+    exerciseOfferBody:
+      "Polarity Transmutation helps you gather evidence of the opposite feeling.",
+    exerciseOfferButton: "Try Polarity Transmutation",
+    skipExercise: "Not now",
   },
 
   reframe: {
@@ -154,6 +164,70 @@ export const strings = {
     comingSoon:
       "Your wins feed will fill in as you keep habits and complete exercises.",
     habitKeptPrefix: "Kept: ",
+    nudgeActedOnPrefix: "Acted on: ",
+    sourceHabitCompletion: "habit",
+    sourceExerciseSession: "exercise",
+    sourceMentalNudgeActedOn: "nudge",
+    sourcePutOffItemCleared: "cleared",
+    sourceManualEntry: "logged",
+  },
+
+  exercises: {
+    // Common polarity pairs offered as gentle scaffolding for step 2 — the
+    // opposite feeling is still the user's own words to confirm or edit.
+    polaritySuggestions: [
+      "seen",
+      "at ease",
+      "abundant",
+      "worthy",
+      "in motion",
+      "supported",
+      "relieved",
+      "secure",
+    ],
+    polarityTransmutation: {
+      entryTitle: "Polarity Transmutation",
+      entryHint: "Magnify what's already here, not what's missing.",
+      startButton: "Begin",
+      exitButton: "Not now",
+      stepFeelingPrompt: "What feeling is present right now?",
+      stepFeelingPlaceholder: "e.g. anxious, unseen, tight",
+      stepFeelingHint: "Just name it. Naming is the first shift.",
+      stepPolarityPrompt: "Name its opposite polarity.",
+      stepPolarityHint: "A few common pairs, if useful — or write your own.",
+      stepPolarityPlaceholder: "e.g. seen, at ease, abundant",
+      stepEvidencePrompt:
+        "Log 1-3 pieces of real evidence the opposite already exists.",
+      stepEvidenceHint: "Small and true counts more than big and vague.",
+      stepEvidencePlaceholder: "A moment, however small, when this was already true",
+      addAnotherEvidence: "Add another",
+      removeEvidence: "Remove",
+      next: "Next",
+      back: "Back",
+      finish: "Complete",
+      completedTitle: "Logged.",
+      completedBody: "This evidence now lives in your Evidence log.",
+      done: "Return to Today",
+      feelingRequired: "Name the feeling to continue.",
+      polarityRequired: "Name the opposite polarity to continue.",
+      evidenceRequired: "Log at least one piece of evidence to continue.",
+    },
+  },
+
+  nudges: {
+    title: "Mental nudges",
+    subtitle: "Intuitive to-dos, captured fast.",
+    addLabel: "What's nudging you?",
+    addPlaceholder: "e.g. message Sam, apply for that role",
+    addButton: "Capture",
+    empty: "Nothing captured yet.",
+    openHeading: "Open",
+    historyHeading: "History",
+    actedOnButton: "Acted on",
+    releaseButton: "Release",
+    actedOnLabel: "acted on",
+    releasedLabel: "released",
+    backToToday: "Back to Today",
   },
 
   settings: {

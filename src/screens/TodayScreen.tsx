@@ -9,9 +9,10 @@ import {
   completionFor,
   habitsDueToday,
   hasCheckInOn,
+  openNudges,
 } from "../lib/selectors";
 import { useStore } from "../state/store";
-import type { Habit } from "../types";
+import type { Habit, MentalNudge } from "../types";
 
 /**
  * Today — the single daily ritual entry point. Top to bottom: headline stats,
@@ -24,6 +25,8 @@ export function TodayScreen() {
   const stats = useStore(cachedStats);
   const checkedInToday = useStore((s) => hasCheckInOn(s, dateKey));
   const habits = useStore((s) => habitsDueToday(s));
+  const openNudgesList = useStore(openNudges);
+  const markNudgeActedOn = useStore((s) => s.markNudgeActedOn);
 
   const [reframeOpen, setReframeOpen] = useState(false);
 
@@ -99,8 +102,60 @@ export function TodayScreen() {
         </div>
       )}
 
+      {/* Mental Nudges preview — up to 3, "see all" routes to the full inbox. */}
+      <Card className="mt-6">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            {strings.today.nudgesPreviewHeading}
+          </h2>
+          <Button variant="ghost" onClick={() => navigate("/nudges")}>
+            {strings.today.seeAll}
+          </Button>
+        </div>
+        {openNudgesList.length === 0 ? (
+          <p className="text-sm text-ink-soft">{strings.today.nudgesPreviewEmpty}</p>
+        ) : (
+          <ul className="space-y-2">
+            {openNudgesList.slice(0, 3).map((n) => (
+              <NudgePreviewRow key={n.id} nudge={n} onActOn={() => markNudgeActedOn(n.id)} />
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Gentle, optional entry point into Polarity Transmutation. */}
+      <Card className="mt-4">
+        <p className="text-sm font-medium text-ink">{strings.today.exerciseCtaTitle}</p>
+        <p className="mt-1 text-sm text-ink-soft">{strings.today.exerciseCtaBody}</p>
+        <div className="mt-3">
+          <Button
+            variant="secondary"
+            onClick={() => navigate("/exercises/polarity-transmutation")}
+          >
+            {strings.today.exerciseCtaButton}
+          </Button>
+        </div>
+      </Card>
+
       {reframeOpen ? <Reframe onClose={() => setReframeOpen(false)} /> : null}
     </div>
+  );
+}
+
+function NudgePreviewRow({
+  nudge,
+  onActOn,
+}: {
+  nudge: MentalNudge;
+  onActOn: () => void;
+}) {
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper-raised p-3">
+      <p className="min-w-0 truncate text-sm text-ink">{nudge.text}</p>
+      <Button variant="secondary" onClick={onActOn}>
+        {strings.nudges.actedOnButton}
+      </Button>
+    </li>
   );
 }
 

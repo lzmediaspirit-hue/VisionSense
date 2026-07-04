@@ -6,10 +6,14 @@ import type {
   DesiredReality,
   EvidenceEntry,
   EvidenceSourceType,
+  ExerciseSession,
+  ExerciseStepEntry,
+  ExerciseType,
   Habit,
   HabitCompletion,
   HabitSchedule,
   ID,
+  MentalNudge,
   SelfTrustLedgerEvent,
   SevenKeysCategory,
 } from "../types";
@@ -100,6 +104,42 @@ export interface StoreActions {
    * Evidence entry, and recomputes the cached ProfileStats.
    */
   recordHabitCompletion: (input: NewHabitCompletion) => HabitCompletion;
+
+  // --- Mental Nudges inbox (M4) ---
+  /** Quick-capture a nudge (single text field, <5s flow). */
+  addMentalNudge: (text: string) => MentalNudge;
+  /**
+   * Mark a nudge acted-on: timestamps `actedAt`, appends a fast-ATFT ledger
+   * event, and derives an Evidence entry. No-ops (returns the nudge as-is) if
+   * it isn't currently open, so a duplicate tap can't double-count.
+   */
+  markNudgeActedOn: (id: ID) => MentalNudge | undefined;
+  /** Consciously let a nudge go — neutral, no ledger event, no evidence. */
+  releaseNudge: (id: ID) => void;
+
+  // --- Exercise runner (M4) ---
+  /**
+   * Start a guided exercise session (writes immediately, `completedAt`
+   * unset). If the user abandons the flow, the session simply stays
+   * incomplete — it is excluded from Momentum and never produces Evidence,
+   * so it cannot corrupt any cached stat.
+   */
+  startExerciseSession: (input: {
+    type: ExerciseType;
+    desiredRealityId?: ID;
+    habitId?: ID;
+  }) => ExerciseSession;
+  /**
+   * Complete a previously-started session: records its steps, stamps
+   * `completedAt`, creates one Evidence entry per supplied evidence text
+   * (Polarity Transmutation's 1-3 logged pieces of evidence), and recomputes
+   * Momentum (completed exercises count as a day's activity).
+   */
+  completeExerciseSession: (
+    id: ID,
+    steps: ExerciseStepEntry[],
+    evidenceTexts?: string[]
+  ) => ExerciseSession | undefined;
 
   /**
    * Validate the cached ProfileStats against the ledger/entity lists and
@@ -386,6 +426,117 @@ export const useStore = create<Store>()(
 
         set({ habitCompletions, selfTrustLedger, evidenceEntries, profileStats: stats });
         return completion;
+      },
+
+      addMentalNudge: (text: string): MentalNudge => {
+        const nudge: MentalNudge = {
+          id: newId(),
+          text,
+          capturedAt: Date.now(),
+          status: "open",
+        };
+        set((s) => ({ mentalNudges: [...s.mentalNudges, nudge] }));
+        return nudge;
+      },
+
+      markNudgeActedOn: (id: ID): MentalNudge | undefined => {
+        const state = useStore.getState();
+        const nudge = state.mentalNudges.find((n) => n.id === id);
+        if (!nudge || nudge.status !== "open") return nudge;
+
+        const now = Date.now();
+        const updatedNudge: MentalNudge = { ...nudge, actedAt: now, status: "actedOn" };
+        const mentalNudges = state.mentalNudges.map((n) => (n.id === id ? updatedNudge : n));
+
+        const event = draftSelfTrustEvent("ATFT", "mentalNudgeActedOn", id, now);
+        const selfTrustLedger = [...state.selfTrustLedger, event];
+        const evidenceEntries = upsertEvidenceEntry(
+          state.evidenceEntries,
+          {
+            sourceType: "mentalNudgeActedOn",
+            sourceId: id,
+            dateKey: toLocalDateKey(new Date(now)),
+            text: `${strings.evidence.nudgeActedOnPrefix}${nudge.text}`,
+          },
+          now
+        );
+
+        const stats = recomputeStatsFromLedger(
+          { ...state, mentalNudges, selfTrustLedger },
+          todayKey()
+        );
+        event.resultingScore = stats.selfTrust;
+        event.delta = stats.selfTrust - state.profileStats.selfTrust;
+
+        set({ mentalNudges, selfTrustLedger, evidenceEntries, profileStats: stats });
+        return updatedNudge;
+      },
+
+      releaseNudge: (id: ID): void => {
+        // Consciously let go — neutral, no ledger event, no evidence entry.
+        set((s) => ({
+          mentalNudges: s.mentalNudges.map((n) =>
+            n.id === id && n.status === "open" ? { ...n, status: "released" } : n
+          ),
+        }));
+      },
+
+      startExerciseSession: (input: {
+        type: ExerciseType;
+        desiredRealityId?: ID;
+        habitId?: ID;
+      }): ExerciseSession => {
+        const now = Date.now();
+        const session: ExerciseSession = {
+          id: newId(),
+          type: input.type,
+          desiredRealityId: input.desiredRealityId,
+          habitId: input.habitId,
+          dateKey: toLocalDateKey(new Date(now)),
+          startedAt: now,
+          steps: [],
+        };
+        set((s) => ({ exerciseSessions: [...s.exerciseSessions, session] }));
+        return session;
+      },
+
+      completeExerciseSession: (
+        id: ID,
+        steps: ExerciseStepEntry[],
+        evidenceTexts: string[] = []
+      ): ExerciseSession | undefined => {
+        const state = useStore.getState();
+        const session = state.exerciseSessions.find((s) => s.id === id);
+        if (!session) return undefined;
+
+        const now = Date.now();
+        const updated: ExerciseSession = { ...session, steps, completedAt: now };
+        const exerciseSessions = state.exerciseSessions.map((s) => (s.id === id ? updated : s));
+
+        const newEvidence: EvidenceEntry[] = evidenceTexts
+          .map((text) => text.trim())
+          .filter((text) => text.length > 0)
+          .map((text) => ({
+            id: newId(),
+            createdAt: now,
+            dateKey: updated.dateKey,
+            text,
+            sourceType: "exerciseSession" as const,
+            sourceId: id,
+            desiredRealityId: session.desiredRealityId,
+          }));
+        const evidenceEntries = [...state.evidenceEntries, ...newEvidence];
+
+        // Exercises don't touch the Self-Trust ledger (only Momentum), so
+        // just recompute — the ledger side of recomputeStatsFromLedger is a
+        // no-op here since selfTrustLedger is unchanged.
+        const stats = recomputeStatsFromLedger(
+          { ...state, exerciseSessions },
+          todayKey()
+        );
+
+        set({ exerciseSessions, evidenceEntries, profileStats: stats });
+        return updated;
       },
 
       ensureStatsFresh: (): void => {

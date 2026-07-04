@@ -1,10 +1,12 @@
 import type {
   AppStateV1,
   DesiredReality,
+  EvidenceEntry,
   Habit,
   HabitCompletion,
   ID,
   LocalDateKey,
+  MentalNudge,
 } from "../types";
 import { toLocalDateKey } from "./dates";
 
@@ -109,4 +111,23 @@ export function cachedStats(state: AppStateV1): {
     selfTrust: Math.round(p?.selfTrust ?? 50),
     momentum: Math.round(p?.momentumDisplayed ?? 0),
   };
+}
+
+/** Open (not yet acted-on/released) nudges, oldest-captured first. */
+export function openNudges(state: AppStateV1): MentalNudge[] {
+  return state.mentalNudges
+    .filter((n) => n.status === "open")
+    .sort((a, b) => a.capturedAt - b.capturedAt);
+}
+
+/** Nudges that have been acted on or released, most recent first. */
+export function nudgeHistory(state: AppStateV1): MentalNudge[] {
+  return state.mentalNudges
+    .filter((n) => n.status !== "open")
+    .sort((a, b) => (b.actedAt ?? b.capturedAt) - (a.actedAt ?? a.capturedAt));
+}
+
+/** The Evidence/Wins feed, reverse-chronological. */
+export function evidenceFeed(state: AppStateV1): EvidenceEntry[] {
+  return [...state.evidenceEntries].sort((a, b) => b.createdAt - a.createdAt);
 }

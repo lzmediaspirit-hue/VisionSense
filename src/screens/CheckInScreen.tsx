@@ -101,6 +101,28 @@ export function CheckInScreen() {
           </div>
         </div>
       ) : null}
+
+      {/* Gentle, optional offer into Polarity Transmutation after any
+          check-in — never auto-triggered, and offered regardless of the
+          base-state content (a lightweight, non-judgmental approach to
+          "when base state reads negative", per M4 spec). */}
+      {step === "saved" ? (
+        <div className="animate-gentle-fade mt-4 rounded-2xl border border-line bg-paper-raised p-5 text-center">
+          <p className="text-sm font-medium text-ink">{c.exerciseOfferTitle}</p>
+          <p className="mt-1 text-sm text-ink-soft">{c.exerciseOfferBody}</p>
+          <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+            <Button
+              variant="secondary"
+              onClick={() => navigate("/exercises/polarity-transmutation")}
+            >
+              {c.exerciseOfferButton}
+            </Button>
+            <Button variant="ghost" onClick={() => navigate("/today")}>
+              {c.skipExercise}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

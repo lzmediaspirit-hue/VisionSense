@@ -244,6 +244,90 @@ describe("recordHabitCompletion: Self-Trust ledger + Evidence wiring", () => {
   });
 });
 
+describe("Mental Nudges: quick-add / acted-on / release", () => {
+  it("adds a nudge as open", () => {
+    const nudge = useStore.getState().addMentalNudge("message Sam");
+    expect(nudge.status).toBe("open");
+    expect(useStore.getState().mentalNudges).toHaveLength(1);
+  });
+
+  it("marking acted-on stamps actedAt, appends a fast-ATFT event, and creates Evidence", () => {
+    const nudge = useStore.getState().addMentalNudge("message Sam");
+    useStore.getState().markNudgeActedOn(nudge.id);
+
+    const state = useStore.getState();
+    const updated = state.mentalNudges.find((n) => n.id === nudge.id);
+    expect(updated?.status).toBe("actedOn");
+    expect(updated?.actedAt).toBeGreaterThan(0);
+    expect(state.selfTrustLedger).toHaveLength(1);
+    expect(state.selfTrustLedger[0].kind).toBe("ATFT");
+    expect(state.selfTrustLedger[0].sourceType).toBe("mentalNudgeActedOn");
+    expect(state.evidenceEntries).toHaveLength(1);
+    expect(state.evidenceEntries[0].sourceType).toBe("mentalNudgeActedOn");
+    expect(state.profileStats.selfTrust).toBeCloseTo(applySelfTrustEvent(50, "ATFT"));
+  });
+
+  it("marking acted-on twice does not double-count (no-op guard)", () => {
+    const nudge = useStore.getState().addMentalNudge("message Sam");
+    useStore.getState().markNudgeActedOn(nudge.id);
+    useStore.getState().markNudgeActedOn(nudge.id);
+    expect(useStore.getState().selfTrustLedger).toHaveLength(1);
+  });
+
+  it("releasing a nudge is neutral: no ledger event, no evidence, no penalty", () => {
+    const nudge = useStore.getState().addMentalNudge("message Sam");
+    useStore.getState().releaseNudge(nudge.id);
+
+    const state = useStore.getState();
+    expect(state.mentalNudges.find((n) => n.id === nudge.id)?.status).toBe("released");
+    expect(state.selfTrustLedger).toHaveLength(0);
+    expect(state.evidenceEntries).toHaveLength(0);
+    expect(state.profileStats.selfTrust).toBe(50);
+  });
+});
+
+describe("Exercise runner sessions", () => {
+  it("starting a session writes it immediately without completedAt", () => {
+    const session = useStore.getState().startExerciseSession({ type: "polarityTransmutation" });
+    expect(session.completedAt).toBeUndefined();
+    expect(useStore.getState().exerciseSessions).toHaveLength(1);
+  });
+
+  it("an abandoned session (never completed) does not affect Momentum or Evidence", () => {
+    useStore.getState().startExerciseSession({ type: "polarityTransmutation" });
+    const state = useStore.getState();
+    expect(state.profileStats.momentumRaw).toBe(0);
+    expect(state.evidenceEntries).toHaveLength(0);
+  });
+
+  it("completing a session stamps completedAt, logs Evidence per text, and counts toward Momentum", () => {
+    const session = useStore.getState().startExerciseSession({ type: "polarityTransmutation" });
+    useStore.getState().completeExerciseSession(
+      session.id,
+      [
+        { stepKey: "nameFeeling", value: "unseen" },
+        { stepKey: "nameOppositePolarity", value: "seen" },
+      ],
+      ["A friend thanked me publicly", "I got positive feedback at work"]
+    );
+
+    const state = useStore.getState();
+    const updated = state.exerciseSessions.find((s) => s.id === session.id);
+    expect(updated?.completedAt).toBeGreaterThan(0);
+    expect(state.evidenceEntries).toHaveLength(2);
+    expect(state.evidenceEntries.every((e) => e.sourceType === "exerciseSession")).toBe(true);
+    expect(state.profileStats.momentumRaw).toBeGreaterThan(0);
+    // Exercises never touch the Self-Trust ledger.
+    expect(state.selfTrustLedger).toHaveLength(0);
+  });
+
+  it("completing an unknown session id is a safe no-op", () => {
+    const result = useStore.getState().completeExerciseSession("nonexistent", [], []);
+    expect(result).toBeUndefined();
+    expect(useStore.getState().evidenceEntries).toHaveLength(0);
+  });
+});
+
 describe("ensureStatsFresh", () => {
   it("recomputes when lastComputedDateKey is stale", () => {
     useStore.setState({
