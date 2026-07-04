@@ -31,25 +31,29 @@ const tabs: TabDef[] = [
 ];
 
 /**
- * Bottom tab bar on mobile. Kept as a semantic <nav>; Phase 3 converts this to
- * a sidebar on desktop via CSS only — no structural change needed here.
+ * Bottom tab bar on mobile; the SAME component and four destinations become a
+ * left sidebar at the `lg:` (>=1024px) breakpoint, via CSS only — restyled,
+ * not a different component or a new flow (engineering-plan §3).
  */
 export function TabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-paper-raised/95 backdrop-blur"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-paper-raised/95 backdrop-blur lg:sticky lg:inset-auto lg:right-auto lg:bottom-auto lg:top-0 lg:z-auto lg:order-first lg:h-screen lg:w-56 lg:shrink-0 lg:border-t-0 lg:border-r lg:bg-paper-raised/60 lg:backdrop-blur-none"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="mx-auto flex max-w-2xl items-stretch justify-around">
+      <ul className="mx-auto flex max-w-2xl items-stretch justify-around lg:mx-0 lg:max-w-none lg:flex-col lg:items-stretch lg:justify-start lg:gap-1 lg:p-4">
         {tabs.map((tab) => (
-          <li key={tab.to} className="flex-1">
+          <li key={tab.to} className="flex-1 lg:flex-none">
             <NavLink
               to={tab.to}
               className={({ isActive }) =>
                 [
                   "flex min-h-[56px] flex-col items-center justify-center gap-1 px-2 py-2 text-xs font-medium transition-colors duration-200 ease-calm",
-                  isActive ? "text-accent-deep" : "text-ink-faint",
+                  "lg:min-h-0 lg:flex-row lg:justify-start lg:gap-3 lg:rounded-xl lg:px-3 lg:py-2.5 lg:text-sm",
+                  isActive
+                    ? "text-accent-deep lg:bg-accent-soft"
+                    : "text-ink-faint hover:lg:bg-paper-sunken",
                 ].join(" ")
               }
             >
