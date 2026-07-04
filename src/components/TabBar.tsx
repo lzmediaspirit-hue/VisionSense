@@ -53,7 +53,7 @@ export function TabBar() {
                   "lg:min-h-0 lg:flex-row lg:justify-start lg:gap-3 lg:rounded-xl lg:px-3 lg:py-2.5 lg:text-sm",
                   isActive
                     ? "text-accent-deep lg:bg-accent-soft"
-                    : "text-ink-faint hover:lg:bg-paper-sunken",
+                    : "text-ink-faint lg:hover:bg-paper-sunken",
                 ].join(" ")
               }
             >

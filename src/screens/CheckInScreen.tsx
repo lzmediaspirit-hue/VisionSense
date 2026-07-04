@@ -40,7 +40,9 @@ export function CheckInScreen() {
   }
 
   return (
-    <div>
+    // Reflective flow: stays a single centered ~560px column at every width,
+    // even when the desktop shell offers more room (engineering-plan §3).
+    <div className="mx-auto w-full max-w-[560px]">
       <ScreenHeader title={c.title} />
 
       {step !== "saved" ? (

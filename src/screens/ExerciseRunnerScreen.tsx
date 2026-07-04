@@ -53,9 +53,11 @@ export function ExerciseRunnerScreen() {
     completeExerciseSession(sessionId as string, steps, evidenceTexts);
   }
 
+  // Reflective flow: a single centered ~560px column at every width, even
+  // when the desktop shell offers more room (engineering-plan §3).
   if (relaxGateEnabled && !gatePassed) {
     return (
-      <div>
+      <div className="mx-auto w-full max-w-[560px]">
         <ScreenHeader title={config.title} />
         <RelaxGate
           onComplete={() => {
@@ -69,7 +71,7 @@ export function ExerciseRunnerScreen() {
   }
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-[560px]">
       <ScreenHeader title={config.title} subtitle={config.hint} />
       <ExerciseRunner
         config={config}
