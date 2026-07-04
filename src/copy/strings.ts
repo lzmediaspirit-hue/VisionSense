@@ -153,6 +153,7 @@ export const strings = {
     empty: "Your wins will collect here as you go.",
     comingSoon:
       "Your wins feed will fill in as you keep habits and complete exercises.",
+    habitKeptPrefix: "Kept: ",
   },
 
   settings: {

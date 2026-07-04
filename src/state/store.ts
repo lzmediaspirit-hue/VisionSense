@@ -4,10 +4,13 @@ import type {
   AppStateV1,
   CheckIn,
   DesiredReality,
+  EvidenceEntry,
+  EvidenceSourceType,
   Habit,
   HabitCompletion,
   HabitSchedule,
   ID,
+  SelfTrustLedgerEvent,
   SevenKeysCategory,
 } from "../types";
 import {
@@ -18,7 +21,13 @@ import {
   saveState,
 } from "../lib/storage";
 import { newId } from "../lib/id";
-import { toLocalDateKey } from "../lib/dates";
+import { toLocalDateKey, todayKey } from "../lib/dates";
+import {
+  recomputeStatsFromLedger,
+  replaySelfTrust,
+  type SelfTrustEventKind,
+} from "../lib/formulas";
+import { strings } from "../copy/strings";
 
 /**
  * The store's persisted slice is exactly AppStateV1. Actions are added on top
@@ -84,11 +93,20 @@ export interface StoreActions {
   addCheckIn: (input: NewCheckIn) => CheckIn;
   /**
    * Record (or update) a habit's completion for a given local day. Upserts on
-   * (habitId, dateKey) so re-tapping updates rather than duplicating. Writes
-   * only the HabitCompletion record — the Self-Trust/Momentum ledger is wired
-   * in Phase 2 (M3).
+   * (habitId, dateKey) so re-tapping updates rather than duplicating. On a
+   * genuine transition (new completion, or `kept` flips), appends an
+   * immutable Self-Trust ledger event keyed by the completion's stable id
+   * (see formulas.ts's same-day flip comment), upserts/removes the derived
+   * Evidence entry, and recomputes the cached ProfileStats.
    */
   recordHabitCompletion: (input: NewHabitCompletion) => HabitCompletion;
+
+  /**
+   * Validate the cached ProfileStats against the ledger/entity lists and
+   * recompute if the day has rolled over or the cache looks corrupt. Call on
+   * app start.
+   */
+  ensureStatsFresh: () => void;
 
   /** Replace the entire persisted state (used by import / clear-data later). */
   replaceAll: (next: AppStateV1) => void;
@@ -108,6 +126,66 @@ export type NewHabitCompletion = Pick<HabitCompletion, "habitId" | "kept"> &
 export type { HabitSchedule, SevenKeysCategory };
 
 export type Store = PersistedState & StoreActions;
+
+// --- Ledger/Evidence write helpers (pure; operate on arrays, not the store) ---
+
+/** Build a not-yet-finalized ledger event; `delta`/`resultingScore` are filled
+ * in by the caller once the post-write recompute is known. */
+function draftSelfTrustEvent(
+  kind: SelfTrustEventKind,
+  sourceType: SelfTrustLedgerEvent["sourceType"],
+  sourceId: ID,
+  now: number
+): SelfTrustLedgerEvent {
+  return { id: newId(), createdAt: now, kind, sourceType, sourceId, delta: 0, resultingScore: 0 };
+}
+
+/** Insert or update the single Evidence entry derived from a given source. */
+function upsertEvidenceEntry(
+  entries: EvidenceEntry[],
+  entry: {
+    sourceType: EvidenceSourceType;
+    sourceId: ID;
+    dateKey: string;
+    text: string;
+    desiredRealityId?: ID;
+  },
+  now: number
+): EvidenceEntry[] {
+  const idx = entries.findIndex(
+    (e) => e.sourceType === entry.sourceType && e.sourceId === entry.sourceId
+  );
+  if (idx >= 0) {
+    const updated: EvidenceEntry = {
+      ...entries[idx],
+      text: entry.text,
+      dateKey: entry.dateKey,
+      desiredRealityId: entry.desiredRealityId,
+    };
+    const copy = [...entries];
+    copy[idx] = updated;
+    return copy;
+  }
+  const created: EvidenceEntry = {
+    id: newId(),
+    createdAt: now,
+    dateKey: entry.dateKey,
+    text: entry.text,
+    sourceType: entry.sourceType,
+    sourceId: entry.sourceId,
+    desiredRealityId: entry.desiredRealityId,
+  };
+  return [...entries, created];
+}
+
+/** Drop any Evidence entries derived from a given source (e.g. an un-kept habit). */
+function removeEvidenceEntriesForSource(
+  entries: EvidenceEntry[],
+  sourceType: EvidenceSourceType,
+  sourceId: ID
+): EvidenceEntry[] {
+  return entries.filter((e) => !(e.sourceType === sourceType && e.sourceId === sourceId));
+}
 
 /**
  * Custom persistence adapter so the on-disk format is our versioned envelope
@@ -244,33 +322,80 @@ export const useStore = create<Store>()(
         const existing = state.habitCompletions.find(
           (c) => c.habitId === input.habitId && c.dateKey === dateKey
         );
+
+        let completion: HabitCompletion;
+        let habitCompletions: HabitCompletion[];
+        let previousKept: boolean | null;
         if (existing) {
-          const updated: HabitCompletion = {
+          previousKept = existing.kept;
+          completion = {
             ...existing,
             kept: input.kept,
             createdAt: now,
             reflectionPromptUsed:
               input.reflectionPromptUsed ?? existing.reflectionPromptUsed,
           };
-          set((s) => ({
-            habitCompletions: s.habitCompletions.map((c) =>
-              c.id === existing.id ? updated : c
-            ),
-          }));
-          return updated;
+          habitCompletions = state.habitCompletions.map((c) =>
+            c.id === existing.id ? completion : c
+          );
+        } else {
+          previousKept = null;
+          completion = {
+            id: newId(),
+            habitId: input.habitId,
+            dateKey,
+            createdAt: now,
+            kept: input.kept,
+            reflectionPromptUsed: input.reflectionPromptUsed,
+          };
+          habitCompletions = [...state.habitCompletions, completion];
         }
-        const completion: HabitCompletion = {
-          id: newId(),
-          habitId: input.habitId,
-          dateKey,
-          createdAt: now,
-          kept: input.kept,
-          reflectionPromptUsed: input.reflectionPromptUsed,
-        };
-        set((s) => ({
-          habitCompletions: [...s.habitCompletions, completion],
-        }));
+
+        // Only a genuine transition (new record, or `kept` flipped) touches
+        // the ledger/evidence — re-tapping the same value is a no-op so it
+        // never inflates the ledger or double-counts (see formulas.ts).
+        if (previousKept === completion.kept) {
+          set({ habitCompletions });
+          return completion;
+        }
+
+        const habit = state.habits.find((h) => h.id === completion.habitId);
+        const kind: SelfTrustEventKind = completion.kept ? "ATFT" : "ITFT";
+        const event = draftSelfTrustEvent(kind, "habitCompletion", completion.id, now);
+        const selfTrustLedger = [...state.selfTrustLedger, event];
+        const evidenceEntries = completion.kept
+          ? upsertEvidenceEntry(
+              state.evidenceEntries,
+              {
+                sourceType: "habitCompletion",
+                sourceId: completion.id,
+                dateKey: completion.dateKey,
+                text: `${strings.evidence.habitKeptPrefix}${habit?.name ?? ""}`.trim(),
+                desiredRealityId: habit?.desiredRealityId,
+              },
+              now
+            )
+          : removeEvidenceEntriesForSource(state.evidenceEntries, "habitCompletion", completion.id);
+
+        const stats = recomputeStatsFromLedger(
+          { ...state, habitCompletions, selfTrustLedger },
+          todayKey()
+        );
+        event.resultingScore = stats.selfTrust;
+        event.delta = stats.selfTrust - state.profileStats.selfTrust;
+
+        set({ habitCompletions, selfTrustLedger, evidenceEntries, profileStats: stats });
         return completion;
+      },
+
+      ensureStatsFresh: (): void => {
+        const state = useStore.getState();
+        const today = todayKey();
+        const expectedSelfTrust = replaySelfTrust(state.selfTrustLedger);
+        const isStale = state.profileStats.lastComputedDateKey !== today;
+        const looksCorrupt = Math.abs(expectedSelfTrust - state.profileStats.selfTrust) > 1e-6;
+        if (!isStale && !looksCorrupt) return;
+        set({ profileStats: recomputeStatsFromLedger(state, today) });
       },
 
       replaceAll: (next) => set(() => ({ ...next })),
