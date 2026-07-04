@@ -356,3 +356,160 @@ describe("ensureStatsFresh", () => {
     expect(useStore.getState().profileStats).toEqual(before);
   });
 });
+
+// --- M5: Put-off list ---
+
+describe("Put-off list: add / clear / release", () => {
+  it("adds an item with no clearedAt/releasedAt", () => {
+    const item = useStore.getState().addPutOffItem("that phone call");
+    expect(item.clearedAt).toBeUndefined();
+    expect(item.releasedAt).toBeUndefined();
+    expect(useStore.getState().putOffItems).toHaveLength(1);
+  });
+
+  it("clearing stamps clearedAt, appends a fast-ATFT event, and creates Evidence", () => {
+    const item = useStore.getState().addPutOffItem("that phone call");
+    useStore.getState().clearPutOffItem(item.id);
+
+    const state = useStore.getState();
+    const updated = state.putOffItems.find((p) => p.id === item.id);
+    expect(updated?.clearedAt).toBeGreaterThan(0);
+    expect(state.selfTrustLedger).toHaveLength(1);
+    expect(state.selfTrustLedger[0].kind).toBe("ATFT");
+    expect(state.selfTrustLedger[0].sourceType).toBe("putOffItemCleared");
+    expect(state.evidenceEntries).toHaveLength(1);
+    expect(state.evidenceEntries[0].sourceType).toBe("putOffItemCleared");
+    expect(state.profileStats.selfTrust).toBeCloseTo(applySelfTrustEvent(50, "ATFT"));
+  });
+
+  it("clearing twice does not double-count (no-op guard)", () => {
+    const item = useStore.getState().addPutOffItem("that phone call");
+    useStore.getState().clearPutOffItem(item.id);
+    useStore.getState().clearPutOffItem(item.id);
+    expect(useStore.getState().selfTrustLedger).toHaveLength(1);
+  });
+
+  it("releasing is neutral: no ledger event, no Evidence, no penalty — never an ITFT", () => {
+    const item = useStore.getState().addPutOffItem("that phone call");
+    useStore.getState().releasePutOffItem(item.id);
+
+    const state = useStore.getState();
+    expect(state.putOffItems.find((p) => p.id === item.id)?.releasedAt).toBeGreaterThan(0);
+    expect(state.selfTrustLedger).toHaveLength(0);
+    expect(state.evidenceEntries).toHaveLength(0);
+    expect(state.profileStats.selfTrust).toBe(50);
+  });
+
+  it("releasing an already-cleared item is a no-op", () => {
+    const item = useStore.getState().addPutOffItem("that phone call");
+    useStore.getState().clearPutOffItem(item.id);
+    useStore.getState().releasePutOffItem(item.id);
+    expect(useStore.getState().putOffItems[0].releasedAt).toBeUndefined();
+  });
+});
+
+// --- M5: Relax-first gate + Settings ---
+
+describe("Relax-first gate + Settings", () => {
+  it("completeRelaxGate stamps relaxGateCompletedAt on the matching session", () => {
+    const session = useStore.getState().startExerciseSession({ type: "polarityTransmutation" });
+    useStore.getState().completeRelaxGate(session.id);
+    const updated = useStore
+      .getState()
+      .exerciseSessions.find((s) => s.id === session.id);
+    expect(updated?.relaxGateCompletedAt).toBeGreaterThan(0);
+  });
+
+  it("updateSettings patches settings without touching other fields", () => {
+    useStore.getState().updateSettings({ relaxGateEnabled: false });
+    expect(useStore.getState().settings.relaxGateEnabled).toBe(false);
+    expect(useStore.getState().settings.languageMode).toBe("bookVocabulary");
+  });
+});
+
+// --- M5: Export / import round trip (CRITICAL, engineering-plan M5 QA line) ---
+
+describe("Export -> clear -> import round trip", () => {
+  it("reproduces the exact original state after export, clear, and import", () => {
+    // Build up a varied, non-trivial state across every entity type.
+    const dr = useStore.getState().addDesiredReality({
+      title: "Steady work",
+      targetFeeling: "secure",
+      normalizeIt: true,
+    });
+    const habit = useStore.getState().addHabit({
+      desiredRealityId: dr.id,
+      name: "Stillness",
+      tier: "inner",
+      actionType: "start",
+      isKeystone: true,
+      schedule: { kind: "daily" },
+    });
+    useStore.getState().recordHabitCompletion({ habitId: habit.id, kept: true });
+    useStore.getState().addCheckIn({ baseState: "at ease" });
+    const nudge = useStore.getState().addMentalNudge("message Sam");
+    useStore.getState().markNudgeActedOn(nudge.id);
+    const putOff = useStore.getState().addPutOffItem("that phone call");
+    useStore.getState().clearPutOffItem(putOff.id);
+    const session = useStore.getState().startExerciseSession({ type: "polarityTransmutation" });
+    useStore.getState().completeRelaxGate(session.id);
+    useStore.getState().completeExerciseSession(
+      session.id,
+      [{ stepKey: "nameFeeling", value: "unseen" }],
+      ["A friend thanked me publicly"]
+    );
+    useStore.getState().updateSettings({ relaxGateEnabled: false });
+
+    const original = useStore.getState().exportStateJSON();
+    const originalParsed = JSON.parse(original);
+
+    useStore.getState().reset();
+    expect(useStore.getState().desiredRealities).toHaveLength(0);
+
+    useStore.getState().importState(original);
+    const restored = useStore.getState().exportStateJSON();
+    const restoredParsed = JSON.parse(restored);
+
+    expect(restoredParsed).toEqual(originalParsed);
+  });
+
+  it("importState throws on unrecognizable JSON and leaves current state untouched", () => {
+    useStore.getState().addDesiredReality({
+      title: "Steady work",
+      targetFeeling: "secure",
+      normalizeIt: false,
+    });
+    const before = useStore.getState().desiredRealities;
+
+    expect(() => useStore.getState().importState("{\"not\":\"an envelope\"}")).toThrow();
+    expect(useStore.getState().desiredRealities).toBe(before);
+  });
+
+  it("importState recomputes stats from the ledger as an integrity check", () => {
+    const dr = useStore.getState().addDesiredReality({
+      title: "Steady work",
+      targetFeeling: "secure",
+      normalizeIt: false,
+    });
+    const habit = useStore.getState().addHabit({
+      desiredRealityId: dr.id,
+      name: "Stillness",
+      tier: "inner",
+      actionType: "start",
+      isKeystone: false,
+      schedule: { kind: "daily" },
+    });
+    useStore.getState().recordHabitCompletion({ habitId: habit.id, kept: true });
+    const json = useStore.getState().exportStateJSON();
+
+    // Corrupt the exported cache to prove import recomputes rather than trusts it blindly.
+    const corrupted = JSON.parse(json);
+    corrupted.data.profileStats.selfTrust = 1;
+    corrupted.data.profileStats.momentumRaw = 999;
+
+    useStore.getState().importState(JSON.stringify(corrupted));
+    expect(useStore.getState().profileStats.selfTrust).toBeCloseTo(
+      applySelfTrustEvent(50, "ATFT")
+    );
+  });
+});

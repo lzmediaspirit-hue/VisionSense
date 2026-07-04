@@ -45,10 +45,16 @@ export const strings = {
     nudgesPreviewHeading: "Mental nudges",
     nudgesPreviewEmpty: "Nothing open right now.",
     seeAll: "See all",
+    putOffPreviewHeading: "Putting off",
+    putOffPreviewEmpty: "Nothing waiting here.",
     exerciseCtaTitle: "Feel the pull of an old frequency?",
     exerciseCtaBody:
       "Try Polarity Transmutation: name it, then gather evidence its opposite is already here.",
     exerciseCtaButton: "Begin Polarity Transmutation",
+    storageWarningTitle: "A gentle reminder to back up",
+    storageWarningBody:
+      "This device is holding a good amount of your data. Exporting a copy in Settings keeps it safe.",
+    storageWarningButton: "Go to Settings",
   },
 
   goals: {
@@ -165,6 +171,7 @@ export const strings = {
       "Your wins feed will fill in as you keep habits and complete exercises.",
     habitKeptPrefix: "Kept: ",
     nudgeActedOnPrefix: "Acted on: ",
+    putOffClearedPrefix: "Cleared: ",
     sourceHabitCompletion: "habit",
     sourceExerciseSession: "exercise",
     sourceMentalNudgeActedOn: "nudge",
@@ -230,19 +237,61 @@ export const strings = {
     backToToday: "Back to Today",
   },
 
+  putOff: {
+    title: "Things you've been putting off",
+    subtitle: "Name them. Clearing one is worth noticing.",
+    addLabel: "What have you been putting off?",
+    addPlaceholder: "e.g. that phone call, the paperwork",
+    addButton: "Add",
+    empty: "Nothing on this list yet.",
+    openHeading: "Open",
+    historyHeading: "History",
+    clearButton: "Clear it",
+    releaseButton: "Let it go",
+    clearedLabel: "cleared",
+    releasedLabel: "let go",
+    backToToday: "Back to Today",
+  },
+
+  relaxGate: {
+    title: "Take a moment first",
+    body: "A little stillness before you begin. Breathe, and let your shoulders drop.",
+    skipButton: "Skip for now",
+  },
+
   settings: {
     title: "Settings",
     schemaVersionLabel: "Data schema version",
     dataSectionTitle: "Your data",
     dataSectionBody:
       "Everything lives on this device only. Export a copy to keep it safe.",
-    exportButton: "Export data (coming soon)",
-    importButton: "Import data (coming soon)",
-    clearButton: "Clear all data (coming soon)",
+    exportButton: "Export data",
+    importButton: "Import data",
+    importConfirmTitle: "Replace what's on this device?",
+    importConfirmBody:
+      "Importing this file replaces everything currently saved here. This can't be undone once confirmed.",
+    importConfirmButton: "Yes, replace it",
+    importSuccess: "Imported. Your data has been replaced with this file.",
+    importUnreadable:
+      "This file couldn't be read as saved data. Nothing was changed.",
+    storageUsageLabel: "Storage used",
+    storageUsageWarning:
+      "You're using a good portion of the space this device sets aside. A quick export keeps a backup safe.",
+    preferencesSectionTitle: "Preferences",
     relaxGateLabel: "Relax-first gate before deep exercises",
+    relaxGateHint:
+      "A little stillness before Polarity Transmutation and other deep exercises.",
     languageLabel: "Language",
     languageBookVocabulary: "Book vocabulary",
     languageSecular: "Plain language (coming soon)",
+    clearSectionTitle: "Start over",
+    clearSectionBody:
+      "Clear everything saved on this device. Consider exporting a backup first.",
+    clearButton: "Clear all data",
+    clearConfirmBody: "This clears every goal, habit, check-in, and log on this device.",
+    clearConfirmLabel: 'Type "clear my data" to confirm',
+    clearConfirmPhrase: "clear my data",
+    clearConfirmButton: "Clear everything",
   },
 
   common: {

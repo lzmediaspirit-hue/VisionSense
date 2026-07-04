@@ -14,14 +14,18 @@ import type {
   HabitSchedule,
   ID,
   MentalNudge,
+  PutOffItem,
   SelfTrustLedgerEvent,
+  Settings,
   SevenKeysCategory,
 } from "../types";
 import {
   CURRENT_SCHEMA_VERSION,
   STORAGE_KEY,
   createEmptyState,
+  exportEnvelopeJSON,
   loadState,
+  parseImportedEnvelope,
   saveState,
 } from "../lib/storage";
 import { newId } from "../lib/id";
@@ -147,6 +151,42 @@ export interface StoreActions {
    * app start.
    */
   ensureStatsFresh: () => void;
+
+  // --- Put-off list (M5) ---
+  /** Quick-add an item to the put-off list. */
+  addPutOffItem: (text: string) => PutOffItem;
+  /**
+   * Clear a put-off item: stamps `clearedAt`, appends an ATFT ledger event
+   * (sourceType "putOffItemCleared"), and derives an Evidence entry. No-ops
+   * (returns the item as-is) if it's already cleared or released, so a
+   * duplicate tap can't double-count.
+   */
+  clearPutOffItem: (id: ID) => PutOffItem | undefined;
+  /**
+   * Consciously let a put-off item go — neutral, like releasing a nudge: no
+   * ledger event, no Evidence entry, no penalty. An un-cleared item never
+   * produces an ITFT.
+   */
+  releasePutOffItem: (id: ID) => void;
+
+  // --- Relax-first gate (M5) ---
+  /** Stamp `relaxGateCompletedAt` on a started exercise session. */
+  completeRelaxGate: (sessionId: ID) => void;
+
+  // --- Settings (M5) ---
+  updateSettings: (patch: Partial<Settings>) => void;
+
+  // --- Export / import (M5) ---
+  /** Serialize the current persisted state as an export-ready JSON string. */
+  exportStateJSON: () => string;
+  /**
+   * Parse+migrate an exported JSON blob through the same migration chain as
+   * a normal load, recompute stats from the ledger as an integrity check,
+   * then replace the whole state. Throws (and leaves the current state
+   * untouched) if the text isn't a recognizable export — callers should
+   * catch this and show a calm message.
+   */
+  importState: (json: string) => void;
 
   /** Replace the entire persisted state (used by import / clear-data later). */
   replaceAll: (next: AppStateV1) => void;
@@ -547,6 +587,81 @@ export const useStore = create<Store>()(
         const looksCorrupt = Math.abs(expectedSelfTrust - state.profileStats.selfTrust) > 1e-6;
         if (!isStale && !looksCorrupt) return;
         set({ profileStats: recomputeStatsFromLedger(state, today) });
+      },
+
+      addPutOffItem: (text: string): PutOffItem => {
+        const item: PutOffItem = { id: newId(), text, createdAt: Date.now() };
+        set((s) => ({ putOffItems: [...s.putOffItems, item] }));
+        return item;
+      },
+
+      clearPutOffItem: (id: ID): PutOffItem | undefined => {
+        const state = useStore.getState();
+        const item = state.putOffItems.find((p) => p.id === id);
+        if (!item || item.clearedAt != null || item.releasedAt != null) return item;
+
+        const now = Date.now();
+        const updated: PutOffItem = { ...item, clearedAt: now };
+        const putOffItems = state.putOffItems.map((p) => (p.id === id ? updated : p));
+
+        const event = draftSelfTrustEvent("ATFT", "putOffItemCleared", id, now);
+        const selfTrustLedger = [...state.selfTrustLedger, event];
+        const evidenceEntries = upsertEvidenceEntry(
+          state.evidenceEntries,
+          {
+            sourceType: "putOffItemCleared",
+            sourceId: id,
+            dateKey: toLocalDateKey(new Date(now)),
+            text: `${strings.evidence.putOffClearedPrefix}${item.text}`,
+          },
+          now
+        );
+
+        // Put-off items aren't part of the Momentum ActivityLog (§4 only
+        // counts habit completions/check-ins/exercises/nudges), so this
+        // recompute only actually touches Self-Trust here.
+        const stats = recomputeStatsFromLedger({ ...state, selfTrustLedger }, todayKey());
+        event.resultingScore = stats.selfTrust;
+        event.delta = stats.selfTrust - state.profileStats.selfTrust;
+
+        set({ putOffItems, selfTrustLedger, evidenceEntries, profileStats: stats });
+        return updated;
+      },
+
+      releasePutOffItem: (id: ID): void => {
+        // Consciously let go — neutral, no ledger event, no Evidence entry.
+        set((s) => ({
+          putOffItems: s.putOffItems.map((p) =>
+            p.id === id && p.clearedAt == null && p.releasedAt == null
+              ? { ...p, releasedAt: Date.now() }
+              : p
+          ),
+        }));
+      },
+
+      completeRelaxGate: (sessionId: ID): void => {
+        set((s) => ({
+          exerciseSessions: s.exerciseSessions.map((e) =>
+            e.id === sessionId && e.relaxGateCompletedAt == null
+              ? { ...e, relaxGateCompletedAt: Date.now() }
+              : e
+          ),
+        }));
+      },
+
+      updateSettings: (patch: Partial<Settings>): void => {
+        set((s) => ({ settings: { ...s.settings, ...patch } }));
+      },
+
+      exportStateJSON: (): string => {
+        const state = useStore.getState();
+        return exportEnvelopeJSON(partialize(state));
+      },
+
+      importState: (json: string): void => {
+        const migrated = parseImportedEnvelope(json); // throws on bad shape
+        const stats = recomputeStatsFromLedger(migrated, todayKey());
+        set(() => ({ ...migrated, profileStats: stats }));
       },
 
       replaceAll: (next) => set(() => ({ ...next })),

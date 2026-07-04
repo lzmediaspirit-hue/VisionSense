@@ -7,8 +7,10 @@ import type {
   ID,
   LocalDateKey,
   MentalNudge,
+  PutOffItem,
 } from "../types";
 import { toLocalDateKey } from "./dates";
+import { computeStorageUsageBytes, STORAGE_QUOTA_BYTES } from "./storage";
 
 /** Non-archived desired realities, newest first. */
 export function activeDesiredRealities(state: AppStateV1): DesiredReality[] {
@@ -130,4 +132,28 @@ export function nudgeHistory(state: AppStateV1): MentalNudge[] {
 /** The Evidence/Wins feed, reverse-chronological. */
 export function evidenceFeed(state: AppStateV1): EvidenceEntry[] {
   return [...state.evidenceEntries].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Open (not yet cleared/released) put-off items, oldest-added first. */
+export function openPutOffItems(state: AppStateV1): PutOffItem[] {
+  return state.putOffItems
+    .filter((p) => p.clearedAt == null && p.releasedAt == null)
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+/** Cleared or released put-off items, most recently resolved first. */
+export function putOffHistory(state: AppStateV1): PutOffItem[] {
+  return state.putOffItems
+    .filter((p) => p.clearedAt != null || p.releasedAt != null)
+    .sort(
+      (a, b) =>
+        (b.clearedAt ?? b.releasedAt ?? b.createdAt) -
+        (a.clearedAt ?? a.releasedAt ?? a.createdAt)
+    );
+}
+
+/** Byte usage of the serialized state vs. the assumed ~5MB quota (§4). */
+export function storageUsage(state: AppStateV1): { bytes: number; ratio: number } {
+  const bytes = computeStorageUsageBytes(state);
+  return { bytes, ratio: bytes / STORAGE_QUOTA_BYTES };
 }

@@ -9,6 +9,7 @@ import { HabitFormScreen } from "./screens/HabitFormScreen";
 import { EvidenceScreen } from "./screens/EvidenceScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { NudgesScreen } from "./screens/NudgesScreen";
+import { PutOffScreen } from "./screens/PutOffScreen";
 import { ExerciseRunnerScreen } from "./screens/ExerciseRunnerScreen";
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
         />
         <Route path="/evidence" element={<EvidenceScreen />} />
         <Route path="/nudges" element={<NudgesScreen />} />
+        <Route path="/put-off" element={<PutOffScreen />} />
         <Route path="/exercises/:slug" element={<ExerciseRunnerScreen />} />
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="*" element={<Navigate to="/today" replace />} />

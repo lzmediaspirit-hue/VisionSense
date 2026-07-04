@@ -10,9 +10,14 @@ import {
   habitsDueToday,
   hasCheckInOn,
   openNudges,
+  openPutOffItems,
+  storageUsage,
 } from "../lib/selectors";
 import { useStore } from "../state/store";
-import type { Habit, MentalNudge } from "../types";
+import type { Habit, MentalNudge, PutOffItem } from "../types";
+
+/** Above this fraction of the assumed ~5MB quota, Today surfaces a calm nudge to back up (§4). */
+const STORAGE_WARNING_RATIO = 0.8;
 
 /**
  * Today — the single daily ritual entry point. Top to bottom: headline stats,
@@ -26,7 +31,10 @@ export function TodayScreen() {
   const checkedInToday = useStore((s) => hasCheckInOn(s, dateKey));
   const habits = useStore((s) => habitsDueToday(s));
   const openNudgesList = useStore(openNudges);
+  const openPutOffList = useStore(openPutOffItems);
+  const usage = useStore(storageUsage);
   const markNudgeActedOn = useStore((s) => s.markNudgeActedOn);
+  const clearPutOffItem = useStore((s) => s.clearPutOffItem);
 
   const [reframeOpen, setReframeOpen] = useState(false);
 
@@ -37,105 +45,156 @@ export function TodayScreen() {
     <div>
       <ScreenHeader title={strings.today.title} subtitle={strings.app.tagline} />
 
-      {/* Headline stats */}
-      <div className="mb-6 grid grid-cols-2 gap-3">
-        <StatCard
-          label={strings.today.selfTrustLabel}
-          value={stats.selfTrust}
-          hint={strings.today.selfTrustHint}
-        />
-        <StatCard
-          label={strings.today.momentumLabel}
-          value={stats.momentum}
-          hint={strings.today.momentumHint}
-        />
-      </div>
+      {usage.ratio > STORAGE_WARNING_RATIO ? (
+        <Card className="mb-6">
+          <p className="text-sm font-medium text-ink">{strings.today.storageWarningTitle}</p>
+          <p className="mt-1 text-sm text-ink-soft">{strings.today.storageWarningBody}</p>
+          <div className="mt-3">
+            <Button variant="secondary" onClick={() => navigate("/settings")}>
+              {strings.today.storageWarningButton}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
-      {/* Base-state check-in access */}
-      <Card className="mb-6">
-        {checkedInToday ? (
-          <p className="text-sm text-ink-soft">{strings.today.checkInDoneToday}</p>
-        ) : (
-          <>
-            <p className="text-sm font-medium text-ink">
-              {strings.today.checkInPrompt}
-            </p>
-            <div className="mt-3">
-              <Button onClick={() => navigate("/check-in")}>
-                {strings.today.checkInCta}
+      <div className="lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <div className="lg:sticky lg:top-6 lg:space-y-4">
+          {/* Headline stats */}
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:mb-0 lg:grid-cols-1">
+            <StatCard
+              label={strings.today.selfTrustLabel}
+              value={stats.selfTrust}
+              hint={strings.today.selfTrustHint}
+            />
+            <StatCard
+              label={strings.today.momentumLabel}
+              value={stats.momentum}
+              hint={strings.today.momentumHint}
+            />
+          </div>
+
+          {/* Base-state check-in access */}
+          <Card className="mb-6 lg:mb-0">
+            {checkedInToday ? (
+              <p className="text-sm text-ink-soft">{strings.today.checkInDoneToday}</p>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-ink">
+                  {strings.today.checkInPrompt}
+                </p>
+                <div className="mt-3">
+                  <Button onClick={() => navigate("/check-in")}>
+                    {strings.today.checkInCta}
+                  </Button>
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+
+        <div>
+          {/* Today's habits, inner-first */}
+          {habits.length === 0 ? (
+            <EmptyState
+              title={strings.today.noHabitsTitle}
+              body={strings.today.noHabitsBody}
+              action={
+                <Button variant="secondary" onClick={() => navigate("/goals")}>
+                  {strings.nav.goals}
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-6">
+              {inner.length > 0 ? (
+                <HabitSection
+                  heading={strings.today.innerHeading}
+                  hint={strings.today.innerHint}
+                  habits={inner}
+                  dateKey={dateKey}
+                  onMiss={() => setReframeOpen(true)}
+                />
+              ) : null}
+              {outer.length > 0 ? (
+                <HabitSection
+                  heading={strings.today.outerHeading}
+                  habits={outer}
+                  dateKey={dateKey}
+                  onMiss={() => setReframeOpen(true)}
+                />
+              ) : null}
+            </div>
+          )}
+
+          {/* Mental Nudges preview — up to 3, "see all" routes to the full inbox. */}
+          <Card className="mt-6">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                {strings.today.nudgesPreviewHeading}
+              </h2>
+              <Button
+                variant="ghost"
+                aria-label={`${strings.today.seeAll}: ${strings.today.nudgesPreviewHeading}`}
+                onClick={() => navigate("/nudges")}
+              >
+                {strings.today.seeAll}
               </Button>
             </div>
-          </>
-        )}
-      </Card>
+            {openNudgesList.length === 0 ? (
+              <p className="text-sm text-ink-soft">{strings.today.nudgesPreviewEmpty}</p>
+            ) : (
+              <ul className="space-y-2">
+                {openNudgesList.slice(0, 3).map((n) => (
+                  <NudgePreviewRow key={n.id} nudge={n} onActOn={() => markNudgeActedOn(n.id)} />
+                ))}
+              </ul>
+            )}
+          </Card>
 
-      {/* Today's habits, inner-first */}
-      {habits.length === 0 ? (
-        <EmptyState
-          title={strings.today.noHabitsTitle}
-          body={strings.today.noHabitsBody}
-          action={
-            <Button variant="secondary" onClick={() => navigate("/goals")}>
-              {strings.nav.goals}
-            </Button>
-          }
-        />
-      ) : (
-        <div className="space-y-6">
-          {inner.length > 0 ? (
-            <HabitSection
-              heading={strings.today.innerHeading}
-              hint={strings.today.innerHint}
-              habits={inner}
-              dateKey={dateKey}
-              onMiss={() => setReframeOpen(true)}
-            />
-          ) : null}
-          {outer.length > 0 ? (
-            <HabitSection
-              heading={strings.today.outerHeading}
-              habits={outer}
-              dateKey={dateKey}
-              onMiss={() => setReframeOpen(true)}
-            />
-          ) : null}
-        </div>
-      )}
+          {/* Put-off list preview — up to 3, "see all" routes to the full list. */}
+          <Card className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                {strings.today.putOffPreviewHeading}
+              </h2>
+              <Button
+                variant="ghost"
+                aria-label={`${strings.today.seeAll}: ${strings.today.putOffPreviewHeading}`}
+                onClick={() => navigate("/put-off")}
+              >
+                {strings.today.seeAll}
+              </Button>
+            </div>
+            {openPutOffList.length === 0 ? (
+              <p className="text-sm text-ink-soft">{strings.today.putOffPreviewEmpty}</p>
+            ) : (
+              <ul className="space-y-2">
+                {openPutOffList.slice(0, 3).map((item) => (
+                  <PutOffPreviewRow
+                    key={item.id}
+                    item={item}
+                    onClear={() => clearPutOffItem(item.id)}
+                  />
+                ))}
+              </ul>
+            )}
+          </Card>
 
-      {/* Mental Nudges preview — up to 3, "see all" routes to the full inbox. */}
-      <Card className="mt-6">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-            {strings.today.nudgesPreviewHeading}
-          </h2>
-          <Button variant="ghost" onClick={() => navigate("/nudges")}>
-            {strings.today.seeAll}
-          </Button>
+          {/* Gentle, optional entry point into Polarity Transmutation. */}
+          <Card className="mt-4">
+            <p className="text-sm font-medium text-ink">{strings.today.exerciseCtaTitle}</p>
+            <p className="mt-1 text-sm text-ink-soft">{strings.today.exerciseCtaBody}</p>
+            <div className="mt-3">
+              <Button
+                variant="secondary"
+                onClick={() => navigate("/exercises/polarity-transmutation")}
+              >
+                {strings.today.exerciseCtaButton}
+              </Button>
+            </div>
+          </Card>
         </div>
-        {openNudgesList.length === 0 ? (
-          <p className="text-sm text-ink-soft">{strings.today.nudgesPreviewEmpty}</p>
-        ) : (
-          <ul className="space-y-2">
-            {openNudgesList.slice(0, 3).map((n) => (
-              <NudgePreviewRow key={n.id} nudge={n} onActOn={() => markNudgeActedOn(n.id)} />
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      {/* Gentle, optional entry point into Polarity Transmutation. */}
-      <Card className="mt-4">
-        <p className="text-sm font-medium text-ink">{strings.today.exerciseCtaTitle}</p>
-        <p className="mt-1 text-sm text-ink-soft">{strings.today.exerciseCtaBody}</p>
-        <div className="mt-3">
-          <Button
-            variant="secondary"
-            onClick={() => navigate("/exercises/polarity-transmutation")}
-          >
-            {strings.today.exerciseCtaButton}
-          </Button>
-        </div>
-      </Card>
+      </div>
 
       {reframeOpen ? <Reframe onClose={() => setReframeOpen(false)} /> : null}
     </div>
@@ -154,6 +213,23 @@ function NudgePreviewRow({
       <p className="min-w-0 truncate text-sm text-ink">{nudge.text}</p>
       <Button variant="secondary" onClick={onActOn}>
         {strings.nudges.actedOnButton}
+      </Button>
+    </li>
+  );
+}
+
+function PutOffPreviewRow({
+  item,
+  onClear,
+}: {
+  item: PutOffItem;
+  onClear: () => void;
+}) {
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper-raised p-3">
+      <p className="min-w-0 truncate text-sm text-ink">{item.text}</p>
+      <Button variant="secondary" onClick={onClear}>
+        {strings.putOff.clearButton}
       </Button>
     </li>
   );

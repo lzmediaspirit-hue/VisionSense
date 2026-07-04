@@ -133,6 +133,92 @@ export function saveState(data: AppStateV1): void {
   safeSetItem(STORAGE_KEY, JSON.stringify(toEnvelope(data)));
 }
 
+// --- Export / import (M5) ---
+//
+// Export and import share the exact same envelope + migration code path as a
+// normal app load: `exportEnvelopeJSON` wraps the current state in the same
+// `toEnvelope` used by `saveState`, and `parseImportedEnvelope` runs the
+// parsed file through `migrateData` just like `loadState` does. This is what
+// keeps "export -> clear -> import" a true round trip.
+
+/** Assumed cross-browser localStorage ceiling (see engineering-plan §4). */
+export const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024;
+
+/** Byte length (not JS string length) of a serialized string, unicode-safe. */
+export function serializedByteLength(json: string): number {
+  return new TextEncoder().encode(json).length;
+}
+
+/** Size, in bytes, the whole persisted envelope would occupy if saved now. */
+export function computeStorageUsageBytes(data: AppStateV1): number {
+  return serializedByteLength(JSON.stringify(toEnvelope(data)));
+}
+
+/** Serialize the full versioned envelope for a Settings → export download. */
+export function exportEnvelopeJSON(data: AppStateV1): string {
+  return JSON.stringify(toEnvelope(data), null, 2);
+}
+
+const REQUIRED_ARRAY_KEYS: (keyof AppStateV1)[] = [
+  "desiredRealities",
+  "habits",
+  "checkIns",
+  "habitCompletions",
+  "exerciseSessions",
+  "mentalNudges",
+  "evidenceEntries",
+  "selfTrustLedger",
+  "putOffItems",
+];
+
+/** A light structural check — enough to catch a random/unrelated JSON file. */
+function looksLikeAppState(value: unknown): value is AppStateV1 {
+  if (typeof value !== "object" || value == null) return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.profileStats !== "object" || v.profileStats == null) return false;
+  if (typeof v.settings !== "object" || v.settings == null) return false;
+  return REQUIRED_ARRAY_KEYS.every((key) => Array.isArray(v[key]));
+}
+
+/**
+ * Parse a Settings → import file through the SAME migration chain as a
+ * normal load (§4), so import and boot share one code path. Throws a plain
+ * `Error` (never touches the copy module — callers catch this and show a
+ * calm string from `strings.settings`) if the text isn't valid JSON, isn't a
+ * recognizable envelope, or comes from a newer schema this build can't read.
+ */
+export function parseImportedEnvelope(json: string): AppStateV1 {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error("not valid JSON");
+  }
+
+  if (
+    typeof parsed !== "object" ||
+    parsed == null ||
+    typeof (parsed as { schemaVersion?: unknown }).schemaVersion !== "number"
+  ) {
+    throw new Error("not a recognizable data export");
+  }
+
+  const envelope = parsed as StorageEnvelope;
+  if (envelope.schemaVersion > CURRENT_SCHEMA_VERSION) {
+    throw new Error("exported by a newer app version");
+  }
+
+  const migrated =
+    envelope.schemaVersion === CURRENT_SCHEMA_VERSION
+      ? envelope.data
+      : migrateData(envelope.data, envelope.schemaVersion, CURRENT_SCHEMA_VERSION);
+
+  if (!looksLikeAppState(migrated)) {
+    throw new Error("not a recognizable data export");
+  }
+  return migrated;
+}
+
 // --- localStorage guards (private browsing / quota / SSR safety) ---
 
 function safeGetItem(key: string): string | null {

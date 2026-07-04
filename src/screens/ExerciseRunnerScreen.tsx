@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ScreenHeader } from "../components/ui";
 import { ExerciseRunner } from "../components/ExerciseRunner";
+import { RelaxGate } from "../components/RelaxGate";
 import { EXERCISE_SLUGS, getExerciseConfig } from "../lib/exerciseConfigs";
 import { useStore } from "../state/store";
 import type { ExerciseStepEntry } from "../types";
@@ -12,6 +13,11 @@ import type { ExerciseStepEntry } from "../types";
  * navigates away mid-flow — is captured with no `completedAt`, per M4 spec).
  * Only Polarity Transmutation is registered today; a future exercise is a new
  * entry in lib/exerciseConfigs.ts, not a new screen.
+ *
+ * M5 inserts the relax-first gate (C9) here, between the session starting and
+ * the runner's first step, respecting `settings.relaxGateEnabled`. The
+ * session itself always starts immediately regardless of the gate, so an
+ * abandoned session (user exits during the gate) is still captured correctly.
  */
 export function ExerciseRunnerScreen() {
   const { slug } = useParams();
@@ -21,7 +27,10 @@ export function ExerciseRunnerScreen() {
 
   const startExerciseSession = useStore((s) => s.startExerciseSession);
   const completeExerciseSession = useStore((s) => s.completeExerciseSession);
+  const completeRelaxGate = useStore((s) => s.completeRelaxGate);
+  const relaxGateEnabled = useStore((s) => s.settings.relaxGateEnabled);
   const [sessionId, setSessionId] = useState<string | undefined>();
+  const [gatePassed, setGatePassed] = useState(false);
   const started = useRef(false);
 
   useEffect(() => {
@@ -42,6 +51,21 @@ export function ExerciseRunnerScreen() {
     );
     const evidenceTexts = values.logEvidence ?? [];
     completeExerciseSession(sessionId as string, steps, evidenceTexts);
+  }
+
+  if (relaxGateEnabled && !gatePassed) {
+    return (
+      <div>
+        <ScreenHeader title={config.title} />
+        <RelaxGate
+          onComplete={() => {
+            completeRelaxGate(sessionId);
+            setGatePassed(true);
+          }}
+          onSkip={() => setGatePassed(true)}
+        />
+      </div>
+    );
   }
 
   return (

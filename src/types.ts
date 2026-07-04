@@ -140,6 +140,7 @@ export interface PutOffItem {
   text: string;
   createdAt: EpochMs;
   clearedAt?: EpochMs; // presence = cleared; feeds an ATFT ledger event
+  releasedAt?: EpochMs; // presence = consciously let go; no ledger event, no penalty
 }
 
 // ---- Derived/cached profile stats (recomputable from the ledger; not itself authoritative) ----

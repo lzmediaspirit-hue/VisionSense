@@ -82,7 +82,11 @@ describe("Today screen: Mental Nudges preview + exercise entry point", () => {
     expect(screen.getByText("three")).toBeInTheDocument();
     expect(screen.queryByText("four")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: strings.today.seeAll }));
+    await user.click(
+      screen.getByRole("button", {
+        name: `${strings.today.seeAll}: ${strings.today.nudgesPreviewHeading}`,
+      })
+    );
     expect(screen.getByRole("heading", { name: strings.nudges.title })).toBeInTheDocument();
   });
 

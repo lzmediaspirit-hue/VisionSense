@@ -20,6 +20,14 @@ function renderApp(path = "/exercises/polarity-transmutation") {
   );
 }
 
+// The relax-first gate (M5, C9) is on by default (settings.relaxGateEnabled),
+// so it's shown before the runner's first step. These tests exercise the
+// exercise-runner flow itself, not the gate (see RelaxGate.test.tsx for that),
+// so they skip it explicitly first — the gate's own "skip" affordance.
+async function skipRelaxGate(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: strings.relaxGate.skipButton }));
+}
+
 describe("Polarity Transmutation exercise runner", () => {
   it("starts a session immediately on entry, before any step is completed", () => {
     renderApp();
@@ -31,6 +39,7 @@ describe("Polarity Transmutation exercise runner", () => {
   it("requires each step's input before advancing", async () => {
     const user = userEvent.setup();
     renderApp();
+    await skipRelaxGate(user);
     const c = strings.exercises.polarityTransmutation;
 
     await user.click(screen.getByRole("button", { name: c.next }));
@@ -40,6 +49,7 @@ describe("Polarity Transmutation exercise runner", () => {
   it("offers tappable polarity suggestions that fill the field", async () => {
     const user = userEvent.setup();
     renderApp();
+    await skipRelaxGate(user);
     const c = strings.exercises.polarityTransmutation;
 
     await user.type(screen.getByLabelText(c.stepFeelingPrompt), "unseen");
@@ -53,6 +63,7 @@ describe("Polarity Transmutation exercise runner", () => {
   it("completing the full flow logs evidence, counts toward Momentum, and never touches the Self-Trust ledger", async () => {
     const user = userEvent.setup();
     renderApp();
+    await skipRelaxGate(user);
     const c = strings.exercises.polarityTransmutation;
 
     await user.type(screen.getByLabelText(c.stepFeelingPrompt), "unseen");
@@ -81,6 +92,7 @@ describe("Polarity Transmutation exercise runner", () => {
   it("an abandoned session (exiting before completion) leaves no Evidence and doesn't corrupt Momentum", async () => {
     const user = userEvent.setup();
     renderApp();
+    await skipRelaxGate(user);
     const c = strings.exercises.polarityTransmutation;
 
     // Exit on the very first step without filling anything in.
@@ -91,5 +103,14 @@ describe("Polarity Transmutation exercise runner", () => {
     expect(state.exerciseSessions[0].completedAt).toBeUndefined();
     expect(state.evidenceEntries).toHaveLength(0);
     expect(state.profileStats.momentumRaw).toBe(0);
+  });
+
+  it("an abandoned session during the relax gate itself is still captured with no completedAt", async () => {
+    renderApp();
+    // Never interacts with the gate at all — simulates navigating away.
+    const state = useStore.getState();
+    expect(state.exerciseSessions).toHaveLength(1);
+    expect(state.exerciseSessions[0].completedAt).toBeUndefined();
+    expect(state.exerciseSessions[0].relaxGateCompletedAt).toBeUndefined();
   });
 });
