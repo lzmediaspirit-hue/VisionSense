@@ -2,8 +2,10 @@ import { create } from "zustand";
 import { persist, type PersistStorage } from "zustand/middleware";
 import type {
   AppStateV1,
+  CheckIn,
   DesiredReality,
   Habit,
+  HabitCompletion,
   HabitSchedule,
   ID,
   SevenKeysCategory,
@@ -16,6 +18,7 @@ import {
   saveState,
 } from "../lib/storage";
 import { newId } from "../lib/id";
+import { toLocalDateKey } from "../lib/dates";
 
 /**
  * The store's persisted slice is exactly AppStateV1. Actions are added on top
@@ -76,11 +79,30 @@ export interface StoreActions {
   updateHabit: (id: ID, patch: HabitPatch) => void;
   archiveHabit: (id: ID) => void;
 
+  // --- Daily loop (M2) ---
+  /** Record today's base-state check-in. */
+  addCheckIn: (input: NewCheckIn) => CheckIn;
+  /**
+   * Record (or update) a habit's completion for a given local day. Upserts on
+   * (habitId, dateKey) so re-tapping updates rather than duplicating. Writes
+   * only the HabitCompletion record — the Self-Trust/Momentum ledger is wired
+   * in Phase 2 (M3).
+   */
+  recordHabitCompletion: (input: NewHabitCompletion) => HabitCompletion;
+
   /** Replace the entire persisted state (used by import / clear-data later). */
   replaceAll: (next: AppStateV1) => void;
   /** Reset to a fresh empty state. */
   reset: () => void;
 }
+
+/** Fields the user supplies for a base-state check-in. */
+export type NewCheckIn = Pick<CheckIn, "baseState"> &
+  Partial<Pick<CheckIn, "note" | "desiredRealityId">>;
+
+/** Fields the user supplies when recording a habit completion. */
+export type NewHabitCompletion = Pick<HabitCompletion, "habitId" | "kept"> &
+  Partial<Pick<HabitCompletion, "reflectionPromptUsed">>;
 
 // Re-export the schedule/category types used by forms for convenience.
 export type { HabitSchedule, SevenKeysCategory };
@@ -200,6 +222,56 @@ export const useStore = create<Store>()(
               : h
           ),
         })),
+
+      addCheckIn: (input) => {
+        const now = Date.now();
+        const checkIn: CheckIn = {
+          id: newId(),
+          dateKey: toLocalDateKey(new Date(now)),
+          createdAt: now,
+          baseState: input.baseState,
+          note: input.note,
+          desiredRealityId: input.desiredRealityId,
+        };
+        set((s) => ({ checkIns: [...s.checkIns, checkIn] }));
+        return checkIn;
+      },
+
+      recordHabitCompletion: (input) => {
+        const now = Date.now();
+        const dateKey = toLocalDateKey(new Date(now));
+        const state = useStore.getState();
+        const existing = state.habitCompletions.find(
+          (c) => c.habitId === input.habitId && c.dateKey === dateKey
+        );
+        if (existing) {
+          const updated: HabitCompletion = {
+            ...existing,
+            kept: input.kept,
+            createdAt: now,
+            reflectionPromptUsed:
+              input.reflectionPromptUsed ?? existing.reflectionPromptUsed,
+          };
+          set((s) => ({
+            habitCompletions: s.habitCompletions.map((c) =>
+              c.id === existing.id ? updated : c
+            ),
+          }));
+          return updated;
+        }
+        const completion: HabitCompletion = {
+          id: newId(),
+          habitId: input.habitId,
+          dateKey,
+          createdAt: now,
+          kept: input.kept,
+          reflectionPromptUsed: input.reflectionPromptUsed,
+        };
+        set((s) => ({
+          habitCompletions: [...s.habitCompletions, completion],
+        }));
+        return completion;
+      },
 
       replaceAll: (next) => set(() => ({ ...next })),
 

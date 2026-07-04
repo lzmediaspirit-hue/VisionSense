@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { TodayScreen } from "./screens/TodayScreen";
+import { CheckInScreen } from "./screens/CheckInScreen";
 import { GoalsScreen } from "./screens/GoalsScreen";
 import { GoalDetailScreen } from "./screens/GoalDetailScreen";
 import { DesiredRealityFormScreen } from "./screens/DesiredRealityFormScreen";
@@ -14,6 +15,7 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<Navigate to="/today" replace />} />
         <Route path="/today" element={<TodayScreen />} />
+        <Route path="/check-in" element={<CheckInScreen />} />
         <Route path="/goals" element={<GoalsScreen />} />
         <Route path="/goals/new" element={<DesiredRealityFormScreen />} />
         <Route path="/goals/:id" element={<GoalDetailScreen />} />
