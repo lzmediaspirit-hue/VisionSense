@@ -92,10 +92,17 @@ describe("copy: components centralize UI text (no hardcoded copy)", () => {
       // language: multi-word letters AND free of code punctuation.
       const textNodes = code.match(/>([^<>]+)</g) ?? [];
       const CODE_CHARS = /[=(){}[\]/\\;:`$|&*+]/;
+      // TS/JS keywords betray a code fragment captured across a `>` from a
+      // generic type argument, not real JSX copy.
+      const CODE_KEYWORDS =
+        /\b(export|function|const|let|var|return|import|interface|type|class|extends|implements|from|default|typeof|keyof|readonly|namespace|enum)\b/;
       const offenders = textNodes
         .map((t) => t.slice(1, -1).trim())
         .filter(
-          (t) => /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(t) && !CODE_CHARS.test(t)
+          (t) =>
+            /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(t) &&
+            !CODE_CHARS.test(t) &&
+            !CODE_KEYWORDS.test(t)
         );
       expect(
         offenders,
