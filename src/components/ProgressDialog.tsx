@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   bucketsFor,
+  calendarMonthFor,
   completionSummary,
+  stepMonth,
+  type CalendarMonth,
   type CompletionBucket,
   type ProgressView,
 } from '../model/completions';
 import type { Chart } from '../model/types';
+
+/** The Progress dialog's tabs: the three bar-chart views plus the calendar. */
+type Tab = ProgressView | 'calendar';
 
 interface ProgressDialogProps {
   open: boolean;
@@ -13,16 +19,17 @@ interface ProgressDialogProps {
   onClose: () => void;
 }
 
-const VIEWS: readonly { id: ProgressView; label: string }[] = [
+const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'daily', label: 'Daily' },
   { id: 'monthly', label: 'Monthly' },
   { id: 'yearly', label: 'Yearly' },
+  { id: 'calendar', label: 'Calendar' },
 ];
 
 const VIEW_CAPTION: Record<ProgressView, string> = {
-  daily: 'Completions per day, last 30 days',
-  monthly: 'Completions per month, last 12 months',
-  yearly: 'Completions per year',
+  daily: 'Events per day, last 30 days',
+  monthly: 'Events per month, last 12 months',
+  yearly: 'Events per year',
 };
 
 /**
@@ -33,7 +40,12 @@ const VIEW_CAPTION: Record<ProgressView, string> = {
  */
 export function ProgressDialog({ open, chart, onClose }: ProgressDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
-  const [view, setView] = useState<ProgressView>('daily');
+  const [tab, setTab] = useState<Tab>('daily');
+  // Calendar navigation: which month is shown (defaults to the current month).
+  const [cal, setCal] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
 
   useEffect(() => {
     const dialog = ref.current;
@@ -50,15 +62,28 @@ export function ProgressDialog({ open, chart, onClose }: ProgressDialogProps) {
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
-  // Recompute against "now" each time the dialog is (re)opened or the view/chart
+  // Reset the calendar to the current month each time the dialog opens.
+  useEffect(() => {
+    if (!open) return;
+    const now = new Date();
+    setCal({ year: now.getFullYear(), month: now.getMonth() });
+  }, [open]);
+
+  const isCalendar = tab === 'calendar';
+
+  // Recompute against "now" each time the dialog is (re)opened or the tab/chart
   // changes. A fresh Date is fine — bucketing is pure and cheap.
   const buckets = useMemo(
-    () => (open ? bucketsFor(chart, view, new Date()) : []),
-    [open, chart, view],
+    () => (open && !isCalendar ? bucketsFor(chart, tab as ProgressView, new Date()) : []),
+    [open, chart, tab, isCalendar],
   );
   const summary = useMemo(
     () => (open ? completionSummary(chart, new Date()) : null),
     [open, chart],
+  );
+  const calendarMonth = useMemo(
+    () => (open && isCalendar ? calendarMonthFor(chart, cal.year, cal.month, new Date()) : null),
+    [open, chart, isCalendar, cal.year, cal.month],
   );
 
   const totalInView = buckets.reduce((sum, b) => sum + b.count, 0);
@@ -101,18 +126,18 @@ export function ProgressDialog({ open, chart, onClose }: ProgressDialogProps) {
         )}
 
         <div className="progress-tabs" role="tablist" aria-label="Progress view">
-          {VIEWS.map((v) => (
+          {TABS.map((t) => (
             <button
-              key={v.id}
+              key={t.id}
               type="button"
               role="tab"
-              id={`progress-tab-${v.id}`}
-              aria-selected={view === v.id}
+              id={`progress-tab-${t.id}`}
+              aria-selected={tab === t.id}
               aria-controls="progress-panel"
-              className={`progress-tabs__tab ${view === v.id ? 'is-active' : ''}`.trim()}
-              onClick={() => setView(v.id)}
+              className={`progress-tabs__tab ${tab === t.id ? 'is-active' : ''}`.trim()}
+              onClick={() => setTab(t.id)}
             >
-              {v.label}
+              {t.label}
             </button>
           ))}
         </div>
@@ -120,10 +145,22 @@ export function ProgressDialog({ open, chart, onClose }: ProgressDialogProps) {
         <div
           id="progress-panel"
           role="tabpanel"
-          aria-labelledby={`progress-tab-${view}`}
+          aria-labelledby={`progress-tab-${tab}`}
           className="progress-panel"
         >
-          <BarChart buckets={buckets} caption={VIEW_CAPTION[view]} totalInView={totalInView} />
+          {isCalendar && calendarMonth ? (
+            <CalendarView
+              month={calendarMonth}
+              onPrev={() => setCal((c) => stepMonth(c.year, c.month, -1))}
+              onNext={() => setCal((c) => stepMonth(c.year, c.month, 1))}
+            />
+          ) : (
+            <BarChart
+              buckets={buckets}
+              caption={VIEW_CAPTION[tab as ProgressView]}
+              totalInView={totalInView}
+            />
+          )}
         </div>
       </div>
     </dialog>
@@ -240,6 +277,76 @@ function BarChart({
           ))}
         </tbody>
       </table>
+    </figure>
+  );
+}
+
+/**
+ * Calendar tab (SPEC 8.4): a month grid where each day is shaded by that day's
+ * event count using the theme accent, today outlined, with month back/forward
+ * navigation and per-day aria-labels. Pure HTML/CSS grid — no libraries.
+ */
+function CalendarView({
+  month,
+  onPrev,
+  onNext,
+}: {
+  month: CalendarMonth;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  // Normalize shade intensity to the busiest day so the scale always spans the
+  // theme accent from faint to strong, regardless of absolute counts.
+  const maxCount = Math.max(1, ...month.weeks.flat().map((d) => d.count));
+
+  return (
+    <figure className="calendar">
+      <div className="calendar__nav">
+        <button type="button" className="btn btn--ghost calendar__navbtn" onClick={onPrev} aria-label="Previous month">
+          <span aria-hidden="true">‹</span>
+        </button>
+        <h3 className="calendar__month" aria-live="polite">
+          {month.label}
+        </h3>
+        <button type="button" className="btn btn--ghost calendar__navbtn" onClick={onNext} aria-label="Next month">
+          <span aria-hidden="true">›</span>
+        </button>
+      </div>
+
+      <div className="calendar__grid" role="group" aria-label={`${month.label} — daily events`}>
+        {month.weekdayHeaders.map((w) => (
+          <div key={w} className="calendar__weekday" aria-hidden="true">
+            {w}
+          </div>
+        ))}
+        {month.weeks.flat().map((day) => {
+          if (day.day === null) {
+            return <div key={day.key} className="calendar__day calendar__day--pad" aria-hidden="true" />;
+          }
+          const intensity = day.count > 0 ? 20 + Math.round((day.count / maxCount) * 60) : 0;
+          const style =
+            day.count > 0
+              ? ({ background: `color-mix(in srgb, var(--accent) ${intensity}%, var(--surface))` } as React.CSSProperties)
+              : undefined;
+          const label = `${day.fullLabel}: ${day.count} completion${day.count === 1 ? '' : 's'}`;
+          return (
+            <div
+              key={day.key}
+              className={`calendar__day ${day.isToday ? 'is-today' : ''} ${day.count > 0 ? 'has-events' : ''}`.trim()}
+              style={style}
+              title={label}
+              aria-label={label}
+            >
+              <span className="calendar__daynum">{day.day}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <figcaption className="calendar__caption">
+        {month.totalCount} completion{month.totalCount === 1 ? '' : 's'} in {month.label}. Days are
+        shaded by event count; today is outlined.
+      </figcaption>
     </figure>
   );
 }

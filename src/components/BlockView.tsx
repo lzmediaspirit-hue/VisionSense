@@ -16,13 +16,20 @@ interface BlockViewProps {
   chart: Chart;
   onCommitText: (cell: GridCell, text: string) => void;
   onCycleStatus: (cell: GridCell) => void;
+  onToggleHabitToday: (cell: GridCell) => void;
   onExpand: (cell: GridCell) => void;
 }
 
 const SWIPE_THRESHOLD = 48;
 
 /** Mobile "block view": one 3x3 block at a time, hub-based navigation. */
-export function BlockView({ chart, onCommitText, onCycleStatus, onExpand }: BlockViewProps) {
+export function BlockView({
+  chart,
+  onCommitText,
+  onCycleStatus,
+  onToggleHabitToday,
+  onExpand,
+}: BlockViewProps) {
   const [position, setPosition] = useState<number>(CENTER_BLOCK); // start at the hub
   // Ephemeral UI state only — never persisted, doesn't touch the data model.
   const [showOverview, setShowOverview] = useState(false);
@@ -151,6 +158,7 @@ export function BlockView({ chart, onCommitText, onCycleStatus, onExpand }: Bloc
                   cell={cell}
                   onCommitText={onCommitText}
                   onCycleStatus={onCycleStatus}
+                  onToggleHabitToday={onToggleHabitToday}
                   onExpand={onExpand}
                   progress={progress}
                 />

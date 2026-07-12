@@ -1,13 +1,16 @@
-// Completion history bucketing for the Progress graph (SPEC 7.2). Pure and
-// unit-tested. Buckets an action's `completedAt` timestamps into daily / monthly
-// / yearly counts for a hand-rolled bar chart.
+// Completion history bucketing for the Progress graph (SPEC 7.2) and calendar
+// (SPEC 8.4). Pure and unit-tested. An "event" is a habit daily check-off (each
+// `completions` entry) or a task completion (`completedAt`) — see collectCompletions.
+// Events are bucketed into daily / monthly / yearly counts for the bar chart and
+// into a month grid for the calendar.
 //
 // TIMEZONE NOTE: buckets are keyed by the viewer's LOCAL calendar (via the
 // Date's local getFullYear/getMonth/getDate), never by slicing the UTC ISO
 // string. A completion at 2024-06-01T23:30:00-05:00 belongs to June 1 for a
 // US-Central viewer even though its UTC date is June 2.
 
-import { TOTAL_ACTIONS, type Chart } from './types';
+import { chartProgress } from './progress';
+import { TOTAL_ACTIONS, type Action, type Chart } from './types';
 
 export type ProgressView = 'daily' | 'monthly' | 'yearly';
 
@@ -41,19 +44,37 @@ export function localMonthKey(d: Date): string {
 }
 
 /**
- * All valid completion timestamps in a chart, as local Dates. Only actions with
- * a non-null, parseable `completedAt` count (an action currently in 'done').
+ * All completion EVENTS in a chart, as local Dates (SPEC 8.3): every habit
+ * daily check-off (`completions` entries) plus every task completion
+ * (`completedAt`). A habit's stored `completedAt` is ignored — its check-offs
+ * live in `completions` — so events are never double-counted. Unparseable
+ * timestamps are skipped rather than throwing.
  */
 export function collectCompletions(chart: Chart): Date[] {
   const dates: Date[] = [];
+  const push = (iso: string | null) => {
+    if (iso === null) return;
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) dates.push(d);
+  };
   for (const pillar of chart.pillars) {
     for (const action of pillar.actions) {
-      if (action.completedAt === null) continue;
-      const d = new Date(action.completedAt);
-      if (!Number.isNaN(d.getTime())) dates.push(d);
+      for (const c of action.completions) push(c);
+      // For a habit the stored completedAt is ignored (SPEC 8.1); a task's
+      // completion is the event.
+      if (!action.habit) push(action.completedAt);
     }
   }
   return dates;
+}
+
+/** Whether a habit action has a check-off on the local day of `now`. */
+export function isHabitCheckedToday(action: Action, now: Date = new Date()): boolean {
+  const today = localDayKey(now);
+  return action.completions.some((c) => {
+    const d = new Date(c);
+    return !Number.isNaN(d.getTime()) && localDayKey(d) === today;
+  });
 }
 
 /** Index completions by a local key function → key -> count. */
@@ -141,19 +162,21 @@ export function bucketsFor(
 }
 
 export interface CompletionSummary {
-  /** Total actions currently completed (have a completedAt). */
+  /** Actions counting as done toward chart progress (task done / habit established). */
   totalDone: number;
   /** Denominator: the fixed 64 action cells. */
   total: number;
-  /** Consecutive local days with >= 1 completion, ending today (0 if today has none). */
+  /** Consecutive local days with >= 1 event, ending today (0 if today has none). */
   currentStreak: number;
 }
 
 /**
- * Overall summary for the Progress dialog. `currentStreak` counts backwards from
- * today: it is the run of consecutive local days each having at least one
- * completion, ending on `now`'s day — so a day with no completions today yields
- * a streak of 0 (honest: the streak only lives while you keep completing).
+ * Overall summary for the Progress dialog. `totalDone` is the chart-progress
+ * count (SPEC 8.3): a task done + a habit established — NOT the raw event count
+ * (which can far exceed 64). `currentStreak` counts backwards from today: the
+ * run of consecutive local days each having at least one event, ending on
+ * `now`'s day — so a day with no events today yields a streak of 0 (honest: the
+ * streak only lives while you keep going).
  */
 export function completionSummary(chart: Chart, now: Date = new Date()): CompletionSummary {
   const dates = collectCompletions(chart);
@@ -164,5 +187,106 @@ export function completionSummary(chart: Chart, now: Date = new Date()): Complet
     if (activeDays.has(localDayKey(d))) currentStreak++;
     else break;
   }
-  return { totalDone: dates.length, total: TOTAL_ACTIONS, currentStreak };
+  return { totalDone: chartProgress(chart).done, total: TOTAL_ACTIONS, currentStreak };
+}
+
+// --- Calendar (SPEC 8.4) -----------------------------------------------------
+//
+// Pure month-grid builder for the Progress dialog's Calendar tab. Weeks start on
+// SUNDAY (locale-neutral); the weekday header below is kept in that same order.
+
+const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+export interface CalendarDay {
+  /** React key (day key for real days, 'pad-N' for padding cells). */
+  key: string;
+  /** Day of month 1..31, or null for padding cells outside the month. */
+  day: number | null;
+  /** Event count on this day (0 for padding). */
+  count: number;
+  /** True for the cell matching `today`'s local day. */
+  isToday: boolean;
+  /** Full label e.g. 'Jul 5, 2026', or null for padding. */
+  fullLabel: string | null;
+}
+
+export interface CalendarMonth {
+  year: number;
+  month: number; // 0..11
+  /** Header label e.g. 'July 2026'. */
+  label: string;
+  /** Weekday headers in display order (Sunday first). */
+  weekdayHeaders: readonly string[];
+  /** Week rows, each exactly length 7. */
+  weeks: CalendarDay[][];
+  /** Total events across the whole month (for the accessible summary). */
+  totalCount: number;
+}
+
+/**
+ * Build the month grid for `year`/`month` (0..11) from `dates`, shading data
+ * available as per-day counts. Leading/trailing cells pad each week to length 7.
+ * `today` is injectable for deterministic tests.
+ */
+export function buildCalendarMonth(
+  dates: Date[],
+  year: number,
+  month: number,
+  today: Date = new Date(),
+): CalendarMonth {
+  const counts = countByKey(dates, localDayKey);
+  const todayKey = localDayKey(today);
+  const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: CalendarDay[] = [];
+  const pad = () => cells.push({ key: `pad-${cells.length}`, day: null, count: 0, isToday: false, fullLabel: null });
+  for (let i = 0; i < firstWeekday; i++) pad();
+  let totalCount = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month, d);
+    const key = localDayKey(date);
+    const count = counts.get(key) ?? 0;
+    totalCount += count;
+    cells.push({
+      key,
+      day: d,
+      count,
+      isToday: key === todayKey,
+      fullLabel: `${MONTHS[month]} ${d}, ${year}`,
+    });
+  }
+  while (cells.length % 7 !== 0) pad();
+
+  const weeks: CalendarDay[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  return {
+    year,
+    month,
+    label: `${MONTH_NAMES[month]} ${year}`,
+    weekdayHeaders: WEEKDAY_HEADERS,
+    weeks,
+    totalCount,
+  };
+}
+
+/** Convenience: build a chart's month grid straight from its events. */
+export function calendarMonthFor(
+  chart: Chart,
+  year: number,
+  month: number,
+  today: Date = new Date(),
+): CalendarMonth {
+  return buildCalendarMonth(collectCompletions(chart), year, month, today);
+}
+
+/** Step a {year, month} pair by `delta` months, normalizing overflow. */
+export function stepMonth(year: number, month: number, delta: number): { year: number; month: number } {
+  const d = new Date(year, month + delta, 1);
+  return { year: d.getFullYear(), month: d.getMonth() };
 }

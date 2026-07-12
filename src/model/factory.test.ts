@@ -16,6 +16,10 @@ describe('factory / Rule of 8', () => {
         expect(action.description).toBe('');
         expect(action.reward).toBe('');
         expect(action.completedAt).toBeNull();
+        // v1.2 habit fields default to off / empty.
+        expect(action.habit).toBe(false);
+        expect(action.established).toBe(false);
+        expect(action.completions).toEqual([]);
       }
     }
   });

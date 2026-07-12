@@ -57,6 +57,10 @@ export interface GridCell {
   description: string | null;
   reward: string | null;
   completedAt: string | null;
+  /** Habit fields (v1.2). For non-action cells: false / false / []. */
+  habit: boolean;
+  established: boolean;
+  completions: string[];
 }
 
 export interface GridBlock {
@@ -83,6 +87,9 @@ function centerBlockCell(chart: Chart, offset: number): GridCell {
       description: null,
       reward: null,
       completedAt: null,
+      habit: false,
+      established: false,
+      completions: [],
     };
   }
   const pillarIndex = orderToPillarIndex(offset);
@@ -100,6 +107,9 @@ function centerBlockCell(chart: Chart, offset: number): GridCell {
     description: null,
     reward: null,
     completedAt: null,
+    habit: false,
+    established: false,
+    completions: [],
   };
 }
 
@@ -119,6 +129,9 @@ function outerBlockCell(chart: Chart, pillarIndex: number, offset: number): Grid
       description: null,
       reward: null,
       completedAt: null,
+      habit: false,
+      established: false,
+      completions: [],
     };
   }
   const actionIndex = orderToPillarIndex(offset);
@@ -136,6 +149,9 @@ function outerBlockCell(chart: Chart, pillarIndex: number, offset: number): Grid
     description: action.description,
     reward: action.reward,
     completedAt: action.completedAt,
+    habit: action.habit,
+    established: action.established,
+    completions: action.completions,
   };
 }
 

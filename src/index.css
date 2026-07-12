@@ -443,6 +443,60 @@ button {
   color: var(--status-done);
 }
 
+/* toggle switch (habit + established, v1.2) */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  user-select: none;
+}
+.switch__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.switch__track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.switch__track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  transition: transform 0.15s var(--ease);
+}
+.switch__input:checked + .switch__track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.switch__input:checked + .switch__track::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+.switch__input:focus-visible + .switch__track {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.switch__label {
+  font-size: 0.9rem;
+  font-weight: 550;
+  color: var(--text);
+}
+
 /* ------------------------------------------------- progress dialog (7.2) */
 .progress-summary {
   display: flex;
@@ -528,6 +582,77 @@ button {
   text-align: center;
 }
 
+/* ------------------------------------------------- calendar view (8.4) */
+.calendar {
+  margin: 0;
+}
+.calendar__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.calendar__navbtn {
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.25rem 0.7rem;
+}
+.calendar__month {
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--text);
+  text-align: center;
+}
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.calendar__weekday {
+  text-align: center;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-bottom: 0.15rem;
+}
+.calendar__day {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 3px 5px;
+}
+.calendar__day--pad {
+  border: none;
+  background: transparent;
+}
+.calendar__daynum {
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--text-muted);
+}
+.calendar__day.has-events .calendar__daynum {
+  color: var(--text);
+  font-weight: 600;
+}
+.calendar__day.is-today {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+.calendar__caption {
+  margin-top: 0.75rem;
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
+}
+
 /* ------------------------------------------------------- reward toast (7.3) */
 .toast-region {
   position: fixed;
@@ -555,6 +680,9 @@ button {
 .toast__glyph {
   display: inline-flex;
   color: var(--status-doing);
+}
+.toast--establish .toast__glyph {
+  color: var(--status-done);
 }
 .toast__text {
   font-size: 0.9rem;
@@ -979,6 +1107,63 @@ button {
   color: var(--status-done);
 }
 
+/* ---------------------------------------------------------- habits (v1.2) */
+/* "Did it today" check — a ring in the status corner, distinct from the task
+   status cycle. Fills (green) when checked off today. */
+.cell__habit-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--status-todo);
+  transition: color 0.12s var(--ease), background 0.12s var(--ease);
+}
+.cell__habit-check:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-muted);
+}
+.is-checked-today .cell__habit-check {
+  color: var(--status-done);
+}
+.is-checked-today .cell__habit-check:hover {
+  color: var(--status-done);
+}
+/* Established-habit badge — a distinct seal, no daily control. */
+.cell__habit-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--status-done);
+  pointer-events: none;
+}
+/* Subtle recurring marker so a habit reads as recurring, not unstarted. */
+.cell__habit-marker {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  display: inline-flex;
+  color: var(--cell-accent, var(--text-faint));
+  opacity: 0.5;
+  pointer-events: none;
+}
+.status-done .cell__habit-marker {
+  color: var(--done-text);
+  opacity: 0.6;
+}
+
 /* ------------------------------------------------------------- block view */
 .blockview {
   width: 100%;
@@ -1196,9 +1381,10 @@ button {
     display: none !important;
   }
 
-  /* Status glyph stays visible in print (it's how "done" reads at a glance
-     on paper) but shouldn't look like a clickable button. */
-  .cell__status {
+  /* Status / habit glyphs stay visible in print (that's how "done" reads at a
+     glance on paper) but shouldn't look like clickable buttons. */
+  .cell__status,
+  .cell__habit-check {
     position: absolute;
     background: none !important;
   }

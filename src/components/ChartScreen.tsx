@@ -7,11 +7,15 @@ import {
   nextStatus,
   renamePillar,
   setActionDetails,
+  setActionEstablished,
+  setActionHabit,
   setActionStatus,
   setActionText,
   setGoal,
   setTheme,
+  toggleHabitToday,
 } from '../model/operations';
+import { isHabitCheckedToday } from '../model/completions';
 import type { Chart, StoredStatus, ThemeId } from '../model/types';
 import { useIsCompact, usePrintMode } from '../hooks/useMediaQuery';
 import { useStore } from '../state/store';
@@ -59,7 +63,7 @@ export function ChartScreen({ chart }: { chart: Chart }) {
     (pillarIndex: number, actionIndex: number, target: StoredStatus) => {
       const action = chart.pillars[pillarIndex]?.actions[actionIndex];
       if (action && target === 'done' && action.status !== 'done' && action.reward.trim() !== '') {
-        setToast({ id: Date.now(), reward: action.reward.trim() });
+        setToast({ id: Date.now(), kind: 'reward', message: action.reward.trim() });
       }
       mutateActive((c) => setActionStatus(c, pillarIndex, actionIndex, target));
     },
@@ -73,6 +77,42 @@ export function ChartScreen({ chart }: { chart: Chart }) {
       applyStatus(cell.pillarIndex, cell.actionIndex, nextStatus(action.status));
     },
     [chart, applyStatus],
+  );
+
+  // Check off / undo a habit for today. The reward toast fires on each daily
+  // CHECK (not on undo) — that is the reinforcement loop (SPEC 8.1).
+  const onToggleHabitToday = useCallback(
+    (cell: GridCell) => {
+      if (cell.pillarIndex === null || cell.actionIndex === null) return;
+      const action = chart.pillars[cell.pillarIndex].actions[cell.actionIndex];
+      const willCheck = !isHabitCheckedToday(action);
+      if (willCheck && action.reward.trim() !== '') {
+        setToast({ id: Date.now(), kind: 'reward', message: action.reward.trim() });
+      }
+      mutateActive((c) => toggleHabitToday(c, cell.pillarIndex!, cell.actionIndex!));
+    },
+    [chart, mutateActive],
+  );
+
+  // Turn a habit on/off from the detail dialog.
+  const onSetHabit = useCallback(
+    (pillarIndex: number, actionIndex: number, habit: boolean) => {
+      mutateActive((c) => setActionHabit(c, pillarIndex, actionIndex, habit));
+    },
+    [mutateActive],
+  );
+
+  // Establish / un-establish a habit. First-time establish is the graduation
+  // moment — celebrate it with a toast (SPEC 8.2).
+  const onSetEstablished = useCallback(
+    (pillarIndex: number, actionIndex: number, established: boolean) => {
+      const action = chart.pillars[pillarIndex]?.actions[actionIndex];
+      if (established && action && !action.established) {
+        setToast({ id: Date.now(), kind: 'establish', message: action.text.trim() || 'Habit' });
+      }
+      mutateActive((c) => setActionEstablished(c, pillarIndex, actionIndex, established));
+    },
+    [chart, mutateActive],
   );
 
   const onExpand = useCallback((cell: GridCell) => {
@@ -157,6 +197,7 @@ export function ChartScreen({ chart }: { chart: Chart }) {
             chart={chart}
             onCommitText={onCommitText}
             onCycleStatus={onCycleStatus}
+            onToggleHabitToday={onToggleHabitToday}
             onExpand={onExpand}
           />
         ) : compact ? (
@@ -164,6 +205,7 @@ export function ChartScreen({ chart }: { chart: Chart }) {
             chart={chart}
             onCommitText={onCommitText}
             onCycleStatus={onCycleStatus}
+            onToggleHabitToday={onToggleHabitToday}
             onExpand={onExpand}
           />
         ) : (
@@ -171,6 +213,7 @@ export function ChartScreen({ chart }: { chart: Chart }) {
             chart={chart}
             onCommitText={onCommitText}
             onCycleStatus={onCycleStatus}
+            onToggleHabitToday={onToggleHabitToday}
             onExpand={onExpand}
           />
         )}
@@ -188,6 +231,12 @@ export function ChartScreen({ chart }: { chart: Chart }) {
         }}
         onSetStatus={(status) => {
           if (detail) applyStatus(detail.pillarIndex, detail.actionIndex, status);
+        }}
+        onSetHabit={(habit) => {
+          if (detail) onSetHabit(detail.pillarIndex, detail.actionIndex, habit);
+        }}
+        onSetEstablished={(established) => {
+          if (detail) onSetEstablished(detail.pillarIndex, detail.actionIndex, established);
         }}
         onClose={() => setDetail(null)}
       />

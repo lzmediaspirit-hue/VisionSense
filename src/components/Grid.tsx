@@ -8,11 +8,12 @@ interface GridProps {
   chart: Chart;
   onCommitText: (cell: GridCell, text: string) => void;
   onCycleStatus: (cell: GridCell) => void;
+  onToggleHabitToday: (cell: GridCell) => void;
   onExpand: (cell: GridCell) => void;
 }
 
 /** Full 9x9 desktop grid with roving-tabindex arrow-key navigation. */
-export function Grid({ chart, onCommitText, onCycleStatus, onExpand }: GridProps) {
+export function Grid({ chart, onCommitText, onCycleStatus, onToggleHabitToday, onExpand }: GridProps) {
   const blocks = buildBlocks(chart);
   const [highlight, setHighlight] = useState<number | null>(null);
   const [focused, setFocused] = useState<{ row: number; col: number }>({ row: 4, col: 4 });
@@ -107,6 +108,7 @@ export function Grid({ chart, onCommitText, onCycleStatus, onExpand }: GridProps
                   registerRef={registerRef}
                   onCommitText={onCommitText}
                   onCycleStatus={onCycleStatus}
+                  onToggleHabitToday={onToggleHabitToday}
                   onExpand={onExpand}
                   onHighlightPillar={setHighlight}
                   onFocusCell={onFocusCell}

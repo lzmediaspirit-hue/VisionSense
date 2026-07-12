@@ -18,6 +18,15 @@ export function isActionFilled(action: Action): boolean {
   return action.text.trim() !== '';
 }
 
+/**
+ * Whether an action counts as "done" toward chart/pillar progress (SPEC 8.3): a
+ * task is done when `status === 'done'`; a habit is done when it is established
+ * (the habit is achieved), regardless of its now-ignored stored status.
+ */
+export function isActionDone(action: Action): boolean {
+  return action.habit ? action.established : action.status === 'done';
+}
+
 export interface Progress {
   filled: number;
   done: number;
@@ -30,7 +39,7 @@ export function pillarProgress(pillar: Pillar): Progress {
   for (const action of pillar.actions) {
     if (isActionFilled(action)) {
       filled++;
-      if (action.status === 'done') done++;
+      if (isActionDone(action)) done++;
     }
   }
   return { filled, done, total: RULE_OF_8 };

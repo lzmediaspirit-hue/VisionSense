@@ -5,11 +5,14 @@ import {
   nextStatus,
   renamePillar,
   setActionDetails,
+  setActionEstablished,
+  setActionHabit,
   setActionStatus,
   setActionText,
   setGoal,
   swapActions,
   swapPillars,
+  toggleHabitToday,
 } from './operations';
 
 const CLOCK = () => '2021-06-06T00:00:00.000Z';
@@ -109,6 +112,86 @@ describe('operations', () => {
     expect(chart.pillars[2].actions[3].completedAt).toBe('2021-08-08T00:00:00.000Z');
     chart = setActionStatus(chart, 2, 3, 'doing', CLOCK);
     expect(chart.pillars[2].actions[3].completedAt).toBeNull();
+  });
+
+  // --- Habits (v1.2) ---------------------------------------------------------
+
+  it('setActionHabit toggles the habit flag (idempotent no-op)', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Meditate', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    expect(chart.pillars[0].actions[0].habit).toBe(true);
+    // No-op returns same reference.
+    expect(setActionHabit(chart, 0, 0, true, CLOCK)).toBe(chart);
+  });
+
+  it('un-marking a habit keeps completions but clears established', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Meditate', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    chart = toggleHabitToday(chart, 0, 0, () => '2024-06-01T08:00:00.000Z');
+    chart = setActionEstablished(chart, 0, 0, true, CLOCK);
+    expect(chart.pillars[0].actions[0].completions).toHaveLength(1);
+
+    const reverted = setActionHabit(chart, 0, 0, false, CLOCK);
+    expect(reverted.pillars[0].actions[0].habit).toBe(false);
+    expect(reverted.pillars[0].actions[0].established).toBe(false); // established cleared
+    expect(reverted.pillars[0].actions[0].completions).toHaveLength(1); // history preserved
+  });
+
+  it('setActionEstablished does not clear completion history', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Run', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    chart = toggleHabitToday(chart, 0, 0, () => '2024-06-01T08:00:00.000Z');
+    chart = setActionEstablished(chart, 0, 0, true, CLOCK);
+    expect(chart.pillars[0].actions[0].established).toBe(true);
+    expect(chart.pillars[0].actions[0].completions).toEqual(['2024-06-01T08:00:00.000Z']);
+    // Un-establish returns to daily tracking, history intact.
+    const back = setActionEstablished(chart, 0, 0, false, CLOCK);
+    expect(back.pillars[0].actions[0].established).toBe(false);
+    expect(back.pillars[0].actions[0].completions).toHaveLength(1);
+  });
+
+  it('toggleHabitToday adds one completion per local day and removes on re-toggle', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Stretch', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+
+    // Check off at 08:00 local -> one completion.
+    const morning = () => new Date(2024, 5, 1, 8, 0).toISOString();
+    chart = toggleHabitToday(chart, 0, 0, morning);
+    expect(chart.pillars[0].actions[0].completions).toHaveLength(1);
+
+    // Toggling again LATER the same local day removes that day's entry.
+    const evening = () => new Date(2024, 5, 1, 22, 0).toISOString();
+    chart = toggleHabitToday(chart, 0, 0, evening);
+    expect(chart.pillars[0].actions[0].completions).toHaveLength(0);
+
+    // A different local day is independent and additive.
+    chart = toggleHabitToday(chart, 0, 0, () => new Date(2024, 5, 1, 9, 0).toISOString());
+    chart = toggleHabitToday(chart, 0, 0, () => new Date(2024, 5, 2, 9, 0).toISOString());
+    expect(chart.pillars[0].actions[0].completions).toHaveLength(2);
+  });
+
+  it('toggleHabitToday keeps at most one completion per local day even across existing entries', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Read', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    // Seed two same-day entries directly (e.g. legacy data), then toggle: both go.
+    const pillars = chart.pillars.slice();
+    pillars[0] = {
+      ...pillars[0],
+      actions: pillars[0].actions.map((a, i) =>
+        i === 0
+          ? {
+              ...a,
+              completions: [
+                new Date(2024, 5, 1, 8, 0).toISOString(),
+                new Date(2024, 5, 1, 20, 0).toISOString(),
+              ],
+            }
+          : a,
+      ),
+    };
+    chart = { ...chart, pillars };
+    const toggled = toggleHabitToday(chart, 0, 0, () => new Date(2024, 5, 1, 12, 0).toISOString());
+    expect(toggled.pillars[0].actions[0].completions).toHaveLength(0);
   });
 
   it('ignores out-of-range indices (Rule of 8 boundary)', () => {

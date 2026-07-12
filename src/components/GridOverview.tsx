@@ -1,3 +1,4 @@
+import { localDayKey } from '../model/completions';
 import { buildBlocks, type GridBlock, type GridCell } from '../model/grid';
 import type { Chart } from '../model/types';
 
@@ -43,7 +44,16 @@ function OverviewCell({ cell }: { cell: GridCell }) {
   const isFilled = cell.text.trim() !== '';
   const classNames = ['cell', `cell--${cell.kind}`];
   classNames.push(isFilled ? 'is-filled' : 'is-empty');
-  if (cell.kind === 'action' && isFilled) classNames.push(`status-${cell.status}`);
+  if (cell.kind === 'action' && isFilled) {
+    if (cell.habit) {
+      classNames.push('is-habit');
+      if (cell.established) classNames.push('is-established');
+      // A habit reads done when established or checked today (SPEC 8.1/8.2).
+      if (cell.established || checkedToday(cell.completions)) classNames.push('status-done');
+    } else {
+      classNames.push(`status-${cell.status}`);
+    }
+  }
 
   const style =
     cell.color && cell.kind !== 'goal'
@@ -55,6 +65,15 @@ function OverviewCell({ cell }: { cell: GridCell }) {
       {isFilled && <span className="cell__text">{cell.text}</span>}
     </div>
   );
+}
+
+/** Whether a completions history has an entry on the local day of now. */
+function checkedToday(completions: string[]): boolean {
+  const today = localDayKey(new Date());
+  return completions.some((c) => {
+    const d = new Date(c);
+    return !Number.isNaN(d.getTime()) && localDayKey(d) === today;
+  });
 }
 
 function blockLabel(chart: Chart, block: GridBlock): string {

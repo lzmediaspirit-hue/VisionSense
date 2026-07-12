@@ -7,7 +7,13 @@ import {
   parseChartImport,
   serializeChartExport,
 } from './exportImport';
-import { cycleActionStatus, renamePillar, setActionText } from './operations';
+import {
+  cycleActionStatus,
+  renamePillar,
+  setActionHabit,
+  setActionText,
+  toggleHabitToday,
+} from './operations';
 
 function sampleChart() {
   let chart = createChart({
@@ -101,6 +107,55 @@ describe('exportImport', () => {
         expect(action.description).toBe('');
         expect(action.reward).toBe('');
         expect(action.completedAt).toBeNull();
+      }
+    }
+  });
+
+  it('round-trips the v1.2 habit fields through export -> import', () => {
+    let chart = setActionText(sampleChart(), 1, 0, 'Meditate', () => '2024-01-01T00:00:00.000Z');
+    chart = setActionHabit(chart, 1, 0, true, () => '2024-01-02T00:00:00.000Z');
+    chart = toggleHabitToday(chart, 1, 0, () => '2024-01-03T08:00:00.000Z');
+    const json = serializeChartExport(chart);
+    expect(json).toContain('habit');
+    expect(json).toContain('established');
+    expect(json).toContain('completions');
+    const result = parseChartImport(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const action = result.chart.pillars[1].actions[0];
+    expect(action.habit).toBe(true);
+    expect(action.completions).toEqual(['2024-01-03T08:00:00.000Z']);
+  });
+
+  it('imports a pre-v1.2 export file (actions lacking habit fields), defaulting them', () => {
+    const chart = sampleChart();
+    const legacyEnvelope = {
+      kind: CHART_EXPORT_KIND,
+      schemaVersion: CHART_EXPORT_VERSION,
+      exportedAt: '2023-06-01T00:00:00.000Z',
+      chart: {
+        ...chart,
+        pillars: chart.pillars.map((p) => ({
+          ...p,
+          actions: p.actions.map((a) => ({
+            id: a.id,
+            text: a.text,
+            status: a.status,
+            description: a.description,
+            reward: a.reward,
+            completedAt: a.completedAt,
+          })),
+        })),
+      },
+    };
+    const result = parseChartImport(JSON.stringify(legacyEnvelope));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const pillar of result.chart.pillars) {
+      for (const action of pillar.actions) {
+        expect(action.habit).toBe(false);
+        expect(action.established).toBe(false);
+        expect(action.completions).toEqual([]);
       }
     }
   });

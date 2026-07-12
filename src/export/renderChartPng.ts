@@ -4,6 +4,7 @@
 // data-theme attribute the chart screen uses, so the PNG always matches what
 // is on screen without hard-coding theme colors here.
 
+import { localDayKey } from '../model/completions';
 import { buildGridCells, GRID_SIZE, type GridCell } from '../model/grid';
 import type { Chart } from '../model/types';
 import { chartFileStem, downloadBlob } from './download';
@@ -175,6 +176,36 @@ function drawStatusGlyph(
   ctx.restore();
 }
 
+/** Habit "did it today" ring: hollow when unchecked, filled disc when checked. */
+function drawHabitGlyph(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  checked: boolean,
+  color: string,
+  fillBg: string,
+) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  if (checked) ctx.fill();
+  ctx.stroke();
+  if (checked) {
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.45, cy + r * 0.05);
+    ctx.lineTo(cx - r * 0.05, cy + r * 0.45);
+    ctx.lineTo(cx + r * 0.55, cy - r * 0.4);
+    ctx.strokeStyle = fillBg;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 interface CellRect {
   x: number;
   y: number;
@@ -236,6 +267,12 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
   ctx.fillRect(PAD, HEADER_H + PAD, gridSpan, gridSpan);
 
   const cells = buildGridCells(chart);
+  const todayKey = localDayKey(new Date());
+  const habitCheckedToday = (cell: GridCell) =>
+    cell.completions.some((c) => {
+      const d = new Date(c);
+      return !Number.isNaN(d.getTime()) && localDayKey(d) === todayKey;
+    });
 
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
@@ -244,6 +281,16 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
       const isFilled = cell.text.trim() !== '';
       const pillarColor = cell.pillarIndex !== null ? colors.pillarColors[cell.pillarIndex % 8] : null;
 
+      // Habit-aware visual state (SPEC 8.1/8.2): established or checked-today
+      // habits read as done; a habit's stored status is ignored.
+      const isHabit = cell.kind === 'action' && cell.habit;
+      const checkedToday = isHabit && habitCheckedToday(cell);
+      const doneVisual =
+        cell.kind === 'action' && isFilled &&
+        (isHabit ? cell.established || checkedToday : cell.status === 'done');
+      const doingVisual =
+        cell.kind === 'action' && isFilled && !isHabit && cell.status === 'doing';
+
       // Background.
       let bg = colors.surface;
       if (cell.kind === 'goal') {
@@ -251,8 +298,8 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
       } else if (cell.kind === 'pillar' && pillarColor) {
         bg = mix(pillarColor, colors.surface, 10);
       } else if (cell.kind === 'action' && isFilled) {
-        if (cell.status === 'doing') bg = mix(colors.statusDoing, colors.surface, 14);
-        else if (cell.status === 'done') bg = colors.doneBg;
+        if (doneVisual) bg = colors.doneBg;
+        else if (doingVisual) bg = mix(colors.statusDoing, colors.surface, 14);
       }
       ctx.fillStyle = bg;
       ctx.fillRect(x, y, CELL, CELL);
@@ -279,7 +326,7 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
       let textColor: string;
       if (isFilled) {
         if (isGoal) textColor = colors.goalText;
-        else if (cell.kind === 'action' && cell.status === 'done') textColor = colors.doneText;
+        else if (doneVisual) textColor = colors.doneText;
         else textColor = colors.text;
       } else {
         textColor = isGoal ? colors.goalMuted : colors.textFaint;
@@ -300,15 +347,33 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
       ctx.restore();
       ctx.textAlign = 'left';
 
-      // Status glyph, top-right, for filled action cells.
-      if (cell.kind === 'action' && isFilled && cell.status) {
-        const glyphColor =
-          cell.status === 'done'
-            ? colors.statusDone
-            : cell.status === 'doing'
-              ? colors.statusDoing
-              : colors.statusTodo;
-        drawStatusGlyph(ctx, x + CELL - 11, y + 11, 6, cell.status, glyphColor);
+      // Status / habit glyph, top-right, for filled action cells.
+      if (cell.kind === 'action' && isFilled) {
+        if (isHabit) {
+          if (cell.established) {
+            // Established habit reads as a done-check (SPEC 8.2).
+            drawStatusGlyph(ctx, x + CELL - 11, y + 11, 6, 'done', colors.statusDone);
+          } else {
+            // Habit as a ring glyph, filled when checked off today.
+            drawHabitGlyph(
+              ctx,
+              x + CELL - 11,
+              y + 11,
+              6,
+              checkedToday,
+              checkedToday ? colors.statusDone : colors.statusTodo,
+              checkedToday ? colors.doneBg : colors.surface,
+            );
+          }
+        } else if (cell.status) {
+          const glyphColor =
+            cell.status === 'done'
+              ? colors.statusDone
+              : cell.status === 'doing'
+                ? colors.statusDoing
+                : colors.statusTodo;
+          drawStatusGlyph(ctx, x + CELL - 11, y + 11, 6, cell.status, glyphColor);
+        }
       }
     }
   }

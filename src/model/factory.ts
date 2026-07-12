@@ -16,7 +16,17 @@ export function defaultPillarColor(index: number): string {
 }
 
 export function createAction(): Action {
-  return { id: newId(), text: '', status: 'todo', description: '', reward: '', completedAt: null };
+  return {
+    id: newId(),
+    text: '',
+    status: 'todo',
+    description: '',
+    reward: '',
+    completedAt: null,
+    habit: false,
+    established: false,
+    completions: [],
+  };
 }
 
 /** Build a fixed-length-8 array of empty actions. */

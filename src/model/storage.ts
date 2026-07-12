@@ -55,7 +55,27 @@ function validateAction(v: unknown): Action | null {
   const description = typeof v.description === 'string' ? v.description : '';
   const reward = typeof v.reward === 'string' ? v.reward : '';
   const completedAt = typeof v.completedAt === 'string' ? v.completedAt : null;
-  return { id, text, status: status as StoredStatus, description, reward, completedAt };
+  // v1.2 habit fields — same additive rule (SPEC 8.5). `completions` is
+  // sanitized: only string entries that parse as a valid date are kept, so a
+  // junk/hand-edited array never poisons the graphs or calendar.
+  const habit = typeof v.habit === 'boolean' ? v.habit : false;
+  const established = typeof v.established === 'boolean' ? v.established : false;
+  const completions = Array.isArray(v.completions)
+    ? v.completions.filter(
+        (c): c is string => typeof c === 'string' && !Number.isNaN(new Date(c).getTime()),
+      )
+    : [];
+  return {
+    id,
+    text,
+    status: status as StoredStatus,
+    description,
+    reward,
+    completedAt,
+    habit,
+    established,
+    completions,
+  };
 }
 
 function validatePillar(v: unknown): Pillar | null {

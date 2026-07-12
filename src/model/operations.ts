@@ -3,6 +3,7 @@
 // There is deliberately no addPillar/addAction/removePillar/removeAction — the
 // Rule of 8 is structural (see factory.ts).
 
+import { localDayKey } from './completions';
 import {
   RULE_OF_8,
   type Action,
@@ -150,6 +151,75 @@ export function cycleActionStatus(
     withStatus(action, nextStatus(action.status), now),
     now,
   );
+}
+
+// --- Habits (v1.2) -----------------------------------------------------------
+
+/** Whether an ISO timestamp falls on the given local day key (bad dates: false). */
+function isOnLocalDay(iso: string, dayKey: string): boolean {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  return localDayKey(d) === dayKey;
+}
+
+/**
+ * Turn daily habit tracking on/off for an action (SPEC 8.1). Turning it OFF
+ * keeps the completion history (honest — it just reverts to task semantics using
+ * the stored status) but also clears `established`, which is only meaningful
+ * while an action is a habit.
+ */
+export function setActionHabit(
+  chart: Chart,
+  pillarIndex: number,
+  actionIndex: number,
+  habit: boolean,
+  now: Clock = defaultNow,
+): Chart {
+  if (!inRange(pillarIndex) || !inRange(actionIndex)) return chart;
+  const action = chart.pillars[pillarIndex].actions[actionIndex];
+  const established = habit ? action.established : false;
+  if (action.habit === habit && action.established === established) return chart;
+  return replaceAction(chart, pillarIndex, actionIndex, { ...action, habit, established }, now);
+}
+
+/**
+ * Mark/un-mark a habit as established (SPEC 8.2). Marking established never
+ * clears the completion history — the graph/calendar keep it. Un-establishing
+ * returns the action to daily tracking.
+ */
+export function setActionEstablished(
+  chart: Chart,
+  pillarIndex: number,
+  actionIndex: number,
+  established: boolean,
+  now: Clock = defaultNow,
+): Chart {
+  if (!inRange(pillarIndex) || !inRange(actionIndex)) return chart;
+  const action = chart.pillars[pillarIndex].actions[actionIndex];
+  if (action.established === established) return chart;
+  return replaceAction(chart, pillarIndex, actionIndex, { ...action, established }, now);
+}
+
+/**
+ * Toggle a habit's "did it today" check (SPEC 8.1). If the action already has a
+ * completion on the local day of `now()`, that day's entries are removed;
+ * otherwise `now()` is appended. At most one completion per local day.
+ */
+export function toggleHabitToday(
+  chart: Chart,
+  pillarIndex: number,
+  actionIndex: number,
+  now: Clock = defaultNow,
+): Chart {
+  if (!inRange(pillarIndex) || !inRange(actionIndex)) return chart;
+  const action = chart.pillars[pillarIndex].actions[actionIndex];
+  const nowIso = now();
+  const today = localDayKey(new Date(nowIso));
+  const checkedToday = action.completions.some((c) => isOnLocalDay(c, today));
+  const completions = checkedToday
+    ? action.completions.filter((c) => !isOnLocalDay(c, today))
+    : [...action.completions, nowIso];
+  return replaceAction(chart, pillarIndex, actionIndex, { ...action, completions }, now);
 }
 
 /** Swap (reorder) two pillars by index. */

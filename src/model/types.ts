@@ -21,6 +21,9 @@ export interface Action {
   description: string; // '' = none; extended notes shown in the detail dialog (v1.1)
   reward: string; // '' = none; celebrated with a toast on completion (v1.1)
   completedAt: string | null; // ISO set when this entered 'done', cleared on leaving (v1.1)
+  habit: boolean; // when true this is a daily behaviour, not a one-shot task (v1.2)
+  established: boolean; // a graduated habit: counts as done, no more daily check-ins (v1.2)
+  completions: string[]; // ISO timestamps of daily check-offs, at most one per local day (v1.2)
 }
 
 export interface Pillar {

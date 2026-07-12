@@ -1,4 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { localDayKey } from '../model/completions';
 import type { GridCell } from '../model/grid';
 import type { Progress } from '../model/progress';
 
@@ -12,6 +13,8 @@ export interface CellProps {
   registerRef?: (row: number, col: number, el: HTMLDivElement | null) => void;
   onCommitText: (cell: GridCell, text: string) => void;
   onCycleStatus: (cell: GridCell) => void;
+  /** Toggle a habit action's "did it today" check (v1.2). */
+  onToggleHabitToday?: (cell: GridCell) => void;
   /** Open the action detail dialog (v1.1). Provided only for action cells. */
   onExpand?: (cell: GridCell) => void;
   onHighlightPillar?: (pillarIndex: number | null) => void;
@@ -43,6 +46,7 @@ function CellImpl(props: CellProps) {
     registerRef,
     onCommitText,
     onCycleStatus,
+    onToggleHabitToday,
     onExpand,
     onHighlightPillar,
     onFocusCell,
@@ -61,6 +65,14 @@ function CellImpl(props: CellProps) {
   const canExpand = isAction && isFilled && !!onExpand;
   const hasDetails =
     isAction && ((cell.description ?? '').trim() !== '' || (cell.reward ?? '').trim() !== '');
+
+  // Habit state (v1.2). "Checked today" is derived from the completions history
+  // against the local day; established habits stop offering the daily check and
+  // render as done.
+  const isHabit = isAction && cell.habit;
+  const isEstablished = isHabit && cell.established;
+  const checkedToday = isHabit && !isEstablished && hasCompletionToday(cell.completions);
+  const doneVisual = isHabit ? isEstablished || checkedToday : isAction && cell.status === 'done';
 
   // Register/unregister DOM node for grid focus management.
   useEffect(() => {
@@ -144,7 +156,18 @@ function CellImpl(props: CellProps) {
   if (cell.isHub) classNames.push('cell--hub');
   if (isFilled) classNames.push('is-filled');
   else classNames.push('is-empty');
-  if (isAction && isFilled) classNames.push(`status-${cell.status}`);
+  if (isAction && isFilled) {
+    if (isHabit) {
+      classNames.push('is-habit');
+      if (isEstablished) classNames.push('is-established');
+      if (checkedToday) classNames.push('is-checked-today');
+      // A checked-today or established habit reads as done (SPEC 8.1/8.2); an
+      // unchecked one stays neutral (like todo) with just its recurring marker.
+      if (doneVisual) classNames.push('status-done');
+    } else {
+      classNames.push(`status-${cell.status}`);
+    }
+  }
   if (highlighted) classNames.push('is-highlighted');
 
   const style =
@@ -204,20 +227,58 @@ function CellImpl(props: CellProps) {
         </div>
       )}
 
+      {/* Recurring marker: a habit reads as recurring, not unstarted (SPEC 8.1). */}
+      {isHabit && !isEstablished && !editing && (
+        <span className="cell__habit-marker" aria-hidden="true" title="Daily habit">
+          <RecurGlyph />
+        </span>
+      )}
+
       {isAction && isFilled && !editing && (
-        <button
-          type="button"
-          className="cell__status"
-          onClick={(e) => {
-            e.stopPropagation();
-            onCycleStatus(cell);
-          }}
-          onKeyDown={(e) => e.stopPropagation()}
-          aria-label={`Status: ${STATUS_LABEL[cell.status ?? 'todo']}. Click to advance.`}
-          title={STATUS_LABEL[cell.status ?? 'todo']}
-        >
-          <StatusGlyph status={cell.status ?? 'todo'} />
-        </button>
+        isEstablished ? (
+          // Established habit: a distinct badge, no daily control (SPEC 8.2).
+          <span
+            className="cell__habit-badge"
+            title="Established habit"
+            aria-label="Established habit"
+          >
+            <BadgeGlyph />
+          </span>
+        ) : isHabit ? (
+          // "Did it today" check — distinct from the task status cycle (SPEC 8.1).
+          <button
+            type="button"
+            className="cell__habit-check"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleHabitToday?.(cell);
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            aria-pressed={checkedToday}
+            aria-label={
+              checkedToday
+                ? `Done today: ${cell.text}. Tap to undo.`
+                : `Not done today: ${cell.text}. Tap to check off.`
+            }
+            title={checkedToday ? 'Done today' : 'Check off today'}
+          >
+            <HabitRing filled={checkedToday} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="cell__status"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCycleStatus(cell);
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            aria-label={`Status: ${STATUS_LABEL[cell.status ?? 'todo']}. Click to advance.`}
+            title={STATUS_LABEL[cell.status ?? 'todo']}
+          >
+            <StatusGlyph status={cell.status ?? 'todo'} />
+          </button>
+        )
       )}
 
       {canExpand && !editing && (
@@ -280,6 +341,70 @@ function StatusGlyph({ status }: { status: 'todo' | 'doing' | 'done' }) {
       <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2" />
     </svg>
   );
+}
+
+/** "Did it today" ring: an open circle that fills with a check when checked. */
+function HabitRing({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" />
+      {filled && (
+        <path
+          d="M5 8.2l2 2 4-4.4"
+          fill="none"
+          stroke="var(--surface)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
+}
+
+/** Established-habit badge: a checkmark seal. */
+function BadgeGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <path
+        d="M8 1.3l1.6 1.2 2 .1.6 1.9 1.6 1.2-.6 1.9.6 1.9-1.6 1.2-.6 1.9-2 .1L8 14.7l-1.6-1.2-2-.1-.6-1.9L2.2 10l.6-1.9-.6-1.9 1.6-1.2.6-1.9 2-.1L8 1.3z"
+        fill="currentColor"
+      />
+      <path
+        d="M5.4 8l1.8 1.8L10.8 6"
+        fill="none"
+        stroke="var(--surface)"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Subtle "recurring" marker (circular arrows) for habit cells. */
+function RecurGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+      <path
+        d="M3.5 8a4.5 4.5 0 0 1 7.7-3.2M12.5 8a4.5 4.5 0 0 1-7.7 3.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path d="M11.5 2.5v2.2H9.3M4.5 13.5v-2.2h2.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Whether a completions history has an entry on the local day of now. */
+function hasCompletionToday(completions: string[]): boolean {
+  const today = localDayKey(new Date());
+  return completions.some((c) => {
+    const d = new Date(c);
+    return !Number.isNaN(d.getTime()) && localDayKey(d) === today;
+  });
 }
 
 function cellAriaLabel(cell: GridCell, isFilled: boolean): string {

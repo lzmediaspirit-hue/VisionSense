@@ -118,6 +118,67 @@ describe('storage', () => {
     }
   });
 
+  // --- v1.2 backward compatibility (SPEC 8.5) --------------------------------
+
+  it('loads a pre-v1.2 blob (actions lacking habit/established/completions) with defaults', () => {
+    // v1.1-shaped actions: they carry description/reward/completedAt but none of
+    // the v1.2 habit keys, mirroring a returning user's localStorage.
+    const state = sampleState();
+    const legacy = {
+      ...state,
+      charts: state.charts.map((c) => ({
+        ...c,
+        pillars: c.pillars.map((p) => ({
+          ...p,
+          actions: p.actions.map((a) => ({
+            id: a.id,
+            text: a.text,
+            status: a.status,
+            description: a.description,
+            reward: a.reward,
+            completedAt: a.completedAt,
+          })),
+        })),
+      })),
+    };
+    storage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+
+    const loaded = loadState(storage);
+    expect(storage.getItem(BACKUP_KEY)).toBeNull(); // not treated as corrupt
+    for (const pillar of loaded.charts[0].pillars) {
+      for (const action of pillar.actions) {
+        expect(action.habit).toBe(false);
+        expect(action.established).toBe(false);
+        expect(action.completions).toEqual([]);
+      }
+    }
+  });
+
+  it('sanitizes the completions array: keeps only valid date strings', () => {
+    const state = sampleState();
+    // Hand-poison one action's completions with junk entries.
+    const raw = JSON.parse(JSON.stringify(state));
+    raw.charts[0].pillars[0].actions[0] = {
+      ...raw.charts[0].pillars[0].actions[0],
+      habit: true,
+      completions: ['2024-06-01T08:00:00.000Z', 'not-a-date', 42, null, '2024-06-02T09:00:00.000Z'],
+    };
+    // A wrong-typed completions field on another action degrades to [].
+    raw.charts[0].pillars[0].actions[1] = {
+      ...raw.charts[0].pillars[0].actions[1],
+      completions: 'nope',
+    };
+    storage.setItem(STORAGE_KEY, JSON.stringify(raw));
+
+    const loaded = loadState(storage);
+    expect(storage.getItem(BACKUP_KEY)).toBeNull(); // sanitized, not rejected
+    expect(loaded.charts[0].pillars[0].actions[0].completions).toEqual([
+      '2024-06-01T08:00:00.000Z',
+      '2024-06-02T09:00:00.000Z',
+    ]);
+    expect(loaded.charts[0].pillars[0].actions[1].completions).toEqual([]);
+  });
+
   it('preserves present v1.1 fields on load', () => {
     const state = sampleState();
     state.charts[0].pillars[0].actions[0] = {
