@@ -231,6 +231,11 @@ function SyncController({ children }: { children: ReactNode }) {
   }, [run, fullSync]);
 
   const disconnect = useCallback(() => {
+    // Cancel any pending debounced push so it can't fire against a revoked token.
+    if (pushTimer.current) {
+      clearTimeout(pushTimer.current);
+      pushTimer.current = null;
+    }
     const token = tokenRef.current;
     if (token) revokeAccessToken(token.accessToken);
     tokenRef.current = null;
@@ -259,6 +264,8 @@ function SyncController({ children }: { children: ReactNode }) {
     if (state.charts === syncedChartsRef.current) return;
     if (pushTimer.current) clearTimeout(pushTimer.current);
     pushTimer.current = setTimeout(() => {
+      // Re-check at fire time: the user may have disconnected while we waited.
+      if (!loadSyncMeta().enabled) return;
       void run(push);
     }, PUSH_DEBOUNCE_MS);
     return () => {

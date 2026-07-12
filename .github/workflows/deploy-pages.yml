@@ -1,13 +1,12 @@
 # Build the app and deploy it to GitHub Pages.
-# Deploys on pushes to main and to the current development branch, and can be
-# run manually from the Actions tab.
+# Deploys on pushes to main (the github-pages environment only allows main),
+# and can be run manually from the Actions tab.
 name: Deploy to GitHub Pages
 
 on:
   push:
     branches:
       - main
-      - claude/doc-review-orchestrate-2mmw2d
   workflow_dispatch:
 
 permissions:
