@@ -1,0 +1,71 @@
+/*
+ * Theme tokens. STRUCTURE is additive-by-design:
+ *   - :root holds structural tokens shared by every theme (spacing, radii, type).
+ *   - Each [data-theme="<id>"] block holds only that theme's colors.
+ * Phase 2 adds new themes by appending a new [data-theme] block below — no code
+ * changes elsewhere. The app sets data-theme on the chart root.
+ */
+
+:root {
+  /* Type */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  --fs-cell: 0.78rem;
+  --fs-goal: 0.98rem;
+  --fs-pillar: 0.86rem;
+  --fs-meta: 0.72rem;
+
+  /* Structure */
+  --cell-gap: 2px; /* subtle border between cells within a block */
+  --block-gap: 5px; /* stronger separation between 3x3 blocks */
+  --radius: 14px;
+  --radius-sm: 8px;
+  --cell-pad: 0.6rem;
+  --grid-max: 860px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ---- minimal (default) ----------------------------------------------------
+ * Also bound to :root so the app is themed before any data-theme is attached
+ * (e.g. the body background). Phase-2 themes override via their own
+ * [data-theme="<id>"] block, which wins for elements carrying that attribute. */
+:root,
+[data-theme='minimal'] {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --grid-bg: #e6e8ee; /* shows through gaps as the block/cell borders */
+
+  --text: #1f2430;
+  --text-muted: #5b6270;
+  --text-faint: #aab0bd; /* placeholder text */
+
+  --border: #e6e8ee;
+  --border-strong: #cdd2dd;
+  --focus-ring: #3b6ef6;
+
+  --accent: #3b6ef6;
+
+  --goal-bg: linear-gradient(155deg, #2a3550 0%, #1c2438 100%);
+  --goal-text: #ffffff;
+  --goal-muted: #b9c2d8;
+  --goal-border: #10182b;
+
+  --status-todo: #b7bdc9;
+  --status-doing: #d9860b;
+  --status-done: #1f9d55;
+  --done-bg: #eef8f1;
+  --done-text: #237d48;
+
+  /* 8 pillar slot colors — calm, distinct hues */
+  --pillar-color-0: #5b63d6;
+  --pillar-color-1: #0f9488;
+  --pillar-color-2: #c9760a;
+  --pillar-color-3: #d6436a;
+  --pillar-color-4: #7a54cf;
+  --pillar-color-5: #1f7fc4;
+  --pillar-color-6: #2f9e52;
+  --pillar-color-7: #dd6a2c;
+}
