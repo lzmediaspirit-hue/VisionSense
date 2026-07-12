@@ -304,6 +304,89 @@ lives under its own key. Old blobs/exports unaffected. The one-time setup the
 owner must do in Google Cloud Console (create OAuth client ID, authorize the
 Pages origin) is documented in `docs/GOOGLE_SYNC_SETUP.md`.
 
+## 11. v1.4 additions (locked): the 1% layer — daily discipline, if-then plans, weekly review
+
+Design principle (owner's philosophy): "to be in the 1% you do what the other
+99% doesn't do." The 99% set goals; the 1% pre-decide when/where they'll act,
+plan each day before it starts, and review every week without fail. Each
+feature below is grounded in the goal-attainment literature:
+- **Implementation intentions** ("if [cue], then [action]") raise goal
+  attainment d ≈ 0.65 over goal intentions alone (Gollwitzer & Sheeran 2006,
+  94 tests, 8k+ participants).
+- **Progress monitoring** raises attainment d ≈ 0.40 (Harkin et al. 2016,
+  138 studies, ~20k participants), stronger when progress is physically
+  recorded.
+- **Weekly written review** is the highest-leverage cadence (Matthews: written
+  goals + weekly progress ≈ 76% attainment vs ~43% baseline); this is also the
+  Harada Method's own daily diary / routine check sheet layer, which the app
+  has not had until now.
+
+### 11.1 If-Then plans (implementation intentions)
+`Action` gains `cue: string` (default `''`). The Action detail dialog gains a
+"When & where?" field (placeholder like "After breakfast, at the park") above
+the reward field. The cue is displayed with the action in the Today view
+(11.2) and in the detail dialog. Cells do NOT grow a new indicator (the
+existing detail dot already covers "there's more here"). Additive/optional:
+validation defaults it, exports include it, `schemaVersion` stays 1.
+
+### 11.2 Today view (Harada daily diary + MIT top-3)
+A new **Today** screen reachable from a prominent button on the dashboard AND
+from the chart header. Content, top to bottom:
+1. **Date heading + current streak** (consecutive local days with ≥1 event
+   across ALL charts — reuse `src/model/completions.ts`).
+2. **Top 3 for today (MITs)**: the user picks up to 3 actions from any chart
+   (a picker lists filled, not-done, not-established actions grouped by
+   chart → pillar; shows each action's cue). Each picked MIT renders as a row:
+   action text, chart/pillar context, cue (if set), and a one-tap complete
+   control — habits check off today (`toggleHabitToday`), tasks go to `done`
+   (`withStatus`), both reusing the existing reward-toast behaviour. Completed
+   MITs render visibly done. Picks are per-day; yesterday's picks never leak
+   into today.
+3. **Daily habits**: every habit action (not established) across all charts,
+   with its today-check state and one-tap toggle, cue shown. Established
+   habits do not appear.
+4. **Evening reflection**: a single free-text line "What did I learn today?"
+   saved per day, plus an auto summary line of what got done today.
+   Method copy in empty states, e.g. "The 99% start their day without a plan.
+   Pick the 3 actions that will make today count."
+
+Data: `AppState` gains optional `days: Record<string /* local YYYY-MM-DD */,
+DayPlan>` with `DayPlan = { mits: Array<{ chartId, actionId }> (max 3,
+structurally capped), note: string, updatedAt: ISO }`. MIT completion state is
+always derived from the referenced action — never duplicated. Days older than
+~400 days are pruned on write. Store gains a `mutateChart(chartId, fn)`
+action (generalizing `mutateActive`) so Today can complete actions in any
+chart, plus day-plan mutations. Validation defaults `days` to `{}` (old blobs
+unaffected); dangling MIT references (deleted chart/action) are silently
+dropped on render.
+
+### 11.3 Weekly review
+A **Review** screen/dialog reachable from the dashboard. Guided prompts, all
+optional short free-text: "What went well?", "What got in the way?", "What
+will you do differently?", and "**#1 focus next week**". Saved per ISO week
+(`YYYY-Www`). Past reviews are listed read-only (newest first) under the
+form. The dashboard Review button shows a subtle **due badge** when the
+current week has no review yet AND the newest review (if any) is ≥7 days old
+or absent. No blocking dialogs, no guilt copy.
+Data: `AppState` gains optional `reviews: Record<string /* YYYY-Www */,
+Review>` with `Review = { wins, obstacle, change, focus: string; updatedAt:
+ISO }`, defaulted to `{}` by validation.
+
+### 11.4 Sync
+`DrivePayload` gains optional `journal: { days, reviews }` (absent → both
+`{}`). Merge is per-key LWW on `updatedAt` (a pure function next to
+`mergeSides`, unit-tested: union, LWW both directions, idempotence). The sync
+controller pushes/pulls the journal alongside charts; pre-v1.4 remote files
+and clients keep working (validation defaults).
+
+### 11.5 Compatibility & quality
+Additive-only as always: `schemaVersion` stays 1; old localStorage blobs,
+old chart JSON exports, and pre-v1.4 Drive files load unchanged. Chart JSON
+export/import is unchanged (the journal is app-level, not part of a chart).
+All UI themed via existing custom properties, mobile-first at 375px with no
+horizontal scroll, keyboard accessible, stable aria-labels for QA (e.g.
+"Today view", "Pick today's top 3", "Weekly review").
+
 ## 9. Repository layout
 
 App lives at the repo root: `index.html`, `src/`, `package.json`, `docs/SPEC.md`
