@@ -159,7 +159,37 @@ tracking over time, AI suggestions, accounts/sync, infinite nesting.
 9. Keyboard-only: create, fill, and complete an action without a mouse.
 10. `npm run build` + `npm test` clean.
 
-## 7. Repository layout
+## 7. v1.1 additions (locked)
+
+### 7.1 Action details (expand on the text)
+`Action` gains optional `description: string` and `reward: string` (default `''`).
+Clicking a cell still inline-edits the title, and the title stays line-clamped in
+the cell — long text never breaks the cell bounds. A new expand affordance on
+action cells (visible on hover/focus, always visible on touch) opens an **Action
+detail dialog**: title, description (long text), reward, and the status control.
+Cells with a description or reward show a subtle indicator so you know there is
+more behind the cell.
+
+### 7.2 Completion history + progress graph
+`Action` gains `completedAt: string | null` (ISO): set when the action
+transitions into `done`, cleared when it leaves `done` (honest history — undoing
+removes the completion). A **Progress** button in the chart header opens a
+dialog with three views: **Daily** (last 30 days), **Monthly** (last 12 months),
+**Yearly** (per year) — completions per bucket as a bar chart with an overall
+completion summary. Hand-rolled SVG, themed via the existing CSS custom
+properties, with an accessible text summary. No chart libraries.
+
+### 7.3 Rewards (habit reinforcement)
+When an action that has a reward transitions into `done`, show a dismissible
+celebration toast — "Reward unlocked: {reward}". The reward is also shown in the
+detail dialog. Quiet, tasteful, no confetti storms.
+
+### 7.4 Compatibility
+`schemaVersion` stays 1: the new fields are additive and optional — validation
+defaults them when absent, so existing localStorage data and previously
+exported JSON files load/import unchanged. Exports include the new fields.
+
+## 8. Repository layout
 
 App lives at the repo root: `index.html`, `src/`, `package.json`, `docs/SPEC.md`
 (this file). `src/` split: `src/model/` (types, factories, migrations, storage —
