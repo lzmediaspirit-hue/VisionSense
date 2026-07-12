@@ -9,6 +9,7 @@ import { chartProgress } from '../model/progress';
 import { useStore } from '../state/store';
 import type { Template } from '../templates/templates';
 import { ConfirmDialog } from './ConfirmDialog';
+import { SyncWidget } from './SyncWidget';
 import { TemplatePicker } from './TemplatePicker';
 
 function formatDate(iso: string): string {
@@ -93,6 +94,8 @@ export function Dashboard() {
           </button>
         </div>
       </header>
+
+      <SyncWidget />
 
       {importError && (
         <p className="dashboard__error" role="alert">

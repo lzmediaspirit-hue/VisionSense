@@ -1,6 +1,7 @@
 import { ChartScreen } from './components/ChartScreen';
 import { Dashboard } from './components/Dashboard';
 import { StoreProvider, useStore } from './state/store';
+import { SyncProvider } from './sync/controller';
 
 function Router() {
   const { activeChart } = useStore();
@@ -12,7 +13,9 @@ function Router() {
 export default function App() {
   return (
     <StoreProvider>
-      <Router />
+      <SyncProvider>
+        <Router />
+      </SyncProvider>
     </StoreProvider>
   );
 }
