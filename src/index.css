@@ -706,6 +706,12 @@ button {
 .blockview__back-placeholder {
   display: block;
 }
+.blockview__overview-toggle {
+  justify-self: end;
+  font-size: 0.78rem;
+  padding: 0.4rem 0.7rem;
+  white-space: nowrap;
+}
 .blockview__title {
   font-size: 1rem;
   font-weight: 650;
@@ -715,6 +721,13 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 60vw;
+}
+/* The full-grid overview wants as much of the viewport's width as it can
+   get (more blocks to fit than a single 3x3), so it drops the single-block
+   max-width cap while active. Still width:100% of its (padded) container,
+   so this never causes horizontal page scroll. */
+.blockview--overview {
+  max-width: var(--grid-max);
 }
 .block--mobile {
   width: 100%;
@@ -795,6 +808,61 @@ button {
   transform-origin: bottom;
   background: var(--cell-accent);
   opacity: 0.85;
+}
+
+/* ------------------------------------------------------- full grid overview
+ * Mobile "Full grid" toggle in the block-view top bar (extends SPEC 4.1's
+ * responsive strategy): all 81 cells at once, scaled to the viewport width,
+ * read-only. Structurally mirrors .grid/.block/.cell (just a <button> per
+ * block instead of a <div>, so tapping/Enter on a block navigates into it —
+ * same mapping as the mini-map, via ../model/grid). */
+.overview {
+  width: 100%;
+  max-width: var(--grid-max);
+  margin: 0 auto;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--block-gap);
+  padding: var(--block-gap);
+  background: var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+.overview__block {
+  /* Reset button UA defaults; layout/background come from the shared
+     .block / .block--pillar rules above. */
+  border: none;
+  margin: 0;
+  padding: 0;
+  text-align: inherit;
+  color: inherit;
+}
+.overview__block:hover,
+.overview__block:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px var(--cell-accent, var(--accent));
+  z-index: 2;
+}
+.overview .cell {
+  padding: 2px;
+  font-size: clamp(0.4rem, 1.6vw, 0.62rem);
+  line-height: 1.15;
+}
+.overview .cell:hover {
+  /* Individual cells aren't interactive in overview mode — only the block
+     (button) is; keep hover feedback on the block, not the cell. */
+  background: var(--surface);
+}
+.overview .cell--goal:hover {
+  background: var(--goal-bg);
+}
+.overview .cell__text {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.overview .cell--goal {
+  font-size: clamp(0.42rem, 1.8vw, 0.66rem);
 }
 
 /* ------------------------------------------------------------- responsive */
