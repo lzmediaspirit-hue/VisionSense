@@ -189,7 +189,54 @@ detail dialog. Quiet, tasteful, no confetti storms.
 defaults them when absent, so existing localStorage data and previously
 exported JSON files load/import unchanged. Exports include the new fields.
 
-## 8. Repository layout
+## 8. v1.2 additions (locked): the habit layer
+
+This brings the app closer to the Harada Method's Routine Check Sheet: some
+actions are not one-shot tasks but daily behaviours.
+
+### 8.1 Habit actions (daily check-off)
+`Action` gains `habit: boolean` (default `false`) and `completions: string[]`
+(default `[]`, ISO timestamps of daily check-offs). Toggled in the detail
+dialog ("Track daily as a habit"). For a habit action:
+- The cell's status control becomes a **"did it today"** check: checking
+  appends a timestamp to `completions`; unchecking the same local day removes
+  that day's entry. At most one completion per local day.
+- Visual state derives from "checked today": checked-today renders like done;
+  an unchecked habit renders like todo (with a subtle habit marker so it reads
+  as recurring, not unstarted). The stored `status`/`completedAt` fields remain
+  but are ignored for habits.
+- A habit's reward toast fires on each daily check (that is the reinforcement
+  loop), not just the first.
+
+### 8.2 Established habits
+`Action` gains `established: boolean` (default `false`), set from the detail
+dialog ("Mark as established — no more daily check-ins"). An established habit:
+- shows a distinct badge on its cell and stops offering the daily check;
+- counts as **done** toward chart/pillar progress (the habit is achieved);
+- keeps its completion history in graphs/calendar;
+- can be un-established (life happens), returning it to daily tracking.
+- When first marked established, celebrate with a toast ("Habit established:
+  {title}") — this is the graduation moment.
+
+### 8.3 Daily progress counting
+The Progress graph's daily/monthly/yearly buckets count **events**: habit
+check-offs (each `completions` entry) plus task completions (`completedAt`).
+Streak = consecutive local days with ≥1 event, unchanged otherwise.
+Chart progress ("X / 64 done"): a task counts when `status === 'done'`; a
+habit counts when `established`.
+
+### 8.4 Calendar view
+The Progress dialog gains a **Calendar** tab: a month grid (weeks as rows,
+localized weekday header, current month by default) where each day cell is
+shaded by that day's event count (0 = empty, deeper shade for more — reuse the
+theme accent scale). Month back/forward navigation; today outlined; a day's
+count available as a tooltip/aria-label. Pure CSS/HTML grid, no libraries.
+
+### 8.5 Compatibility
+Same additive rules as v1.1: `schemaVersion` stays 1, validation defaults the
+new fields, old localStorage blobs and old JSON exports load/import unchanged.
+
+## 9. Repository layout
 
 App lives at the repo root: `index.html`, `src/`, `package.json`, `docs/SPEC.md`
 (this file). `src/` split: `src/model/` (types, factories, migrations, storage —
