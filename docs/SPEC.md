@@ -236,6 +236,74 @@ count available as a tooltip/aria-label. Pure CSS/HTML grid, no libraries.
 Same additive rules as v1.1: `schemaVersion` stays 1, validation defaults the
 new fields, old localStorage blobs and old JSON exports load/import unchanged.
 
+## 10. v1.3 additions (locked): Google Drive sync ("login to save")
+
+Optional cloud backup/sync while preserving the local-first architecture: no
+backend of ours, the app remains a static site. The user signs in with Google
+and the app stores its data in the **hidden app-data folder of the user's own
+Google Drive** (scope `drive.appdata` — the app cannot see any other Drive
+files, and the user can revoke at any time).
+
+### 10.1 Configuration & graceful absence
+- `src/sync/config.ts` exports `GOOGLE_CLIENT_ID: string` (committed; OAuth web
+  client IDs are public identifiers, not secrets). **When empty, the entire
+  sync feature is invisible** — no UI, no external script loads, app behaves
+  exactly as v1.2. This ships before the user has created their client ID.
+- The Google Identity Services script (`https://accounts.google.com/gsi/client`)
+  is loaded dynamically only when sync is used (user clicks connect, or a
+  previous session was connected) — never on plain page load for
+  unconnected users.
+
+### 10.2 Auth
+- GIS **token model** (`google.accounts.oauth2.initTokenClient`), scopes:
+  `https://www.googleapis.com/auth/drive.appdata openid email`.
+- Access token kept in memory only. On expiry (~1h) re-request silently
+  (`prompt: ''`); if silent renewal fails, sync pauses and the UI shows a
+  **Reconnect** affordance (local editing is never blocked).
+- `email` (via OpenID userinfo) is shown as "Connected as {email}".
+- Disconnect: revoke the token (`google.accounts.oauth2.revoke`), clear sync
+  metadata. **Local data is kept** — disconnect never deletes charts.
+
+### 10.3 Storage & merge
+- One JSON file `visionsense.json` in `appDataFolder` holding
+  `{ schemaVersion: 1, charts, deletedChartIds, savedAt }` — the same chart
+  shapes as local storage, validated with the same defaults on read.
+- Sync metadata in localStorage under `visionsense.sync.v1`:
+  `{ enabled, email, fileId, lastSyncAt, deletedChartIds: Record<chartId, deletedAtISO> }`.
+- **Merge is per chart, last-write-wins on `updatedAt`**; charts present on
+  only one side are kept (union). Chart deletion writes a tombstone into
+  `deletedChartIds`; on merge a tombstone newer than the chart's `updatedAt`
+  removes it (otherwise the chart survives and the tombstone is dropped).
+  Tombstones older than 90 days are pruned. Merge logic is **pure functions in
+  `src/sync/merge.ts` with Vitest coverage** (union, LWW, tombstone win/lose,
+  idempotence).
+- Drive REST calls are a thin fetch wrapper in `src/sync/drive.ts`
+  (list-by-name in `appDataFolder` spaces, download media, multipart
+  create/update). The token is injected (function argument / small interface)
+  so the layer is mockable in tests and browser QA.
+
+### 10.4 Sync behaviour
+- On connect: pull remote (if any) → merge with local → save merged locally →
+  push merged to Drive.
+- While connected: every local mutation schedules a **debounced (~2 s) push**;
+  app load with `enabled` metadata attempts silent reconnect then a pull+merge.
+- A **"Sync now"** control forces pull+merge+push.
+- Failures (offline, 401/403, quota) are non-blocking: status chip shows the
+  error state, local editing continues, next successful sync catches up.
+
+### 10.5 UI
+- Dashboard header gains a sync widget: disconnected → "Connect Google Drive"
+  button (only when a client ID is configured); connected → status chip with
+  last-synced time, "Connected as {email}", **Sync now** and **Disconnect**.
+  States (syncing / synced / error / reconnect) get distinct, themed styling
+  and accessible names. No blocking dialogs; errors are quiet.
+
+### 10.6 Compatibility
+No changes to the chart data model; `schemaVersion` stays 1. Sync metadata
+lives under its own key. Old blobs/exports unaffected. The one-time setup the
+owner must do in Google Cloud Console (create OAuth client ID, authorize the
+Pages origin) is documented in `docs/GOOGLE_SYNC_SETUP.md`.
+
 ## 9. Repository layout
 
 App lives at the repo root: `index.html`, `src/`, `package.json`, `docs/SPEC.md`
