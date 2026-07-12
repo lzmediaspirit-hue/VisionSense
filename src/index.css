@@ -161,6 +161,101 @@ button {
   font-size: 0.85rem;
   margin-bottom: 1.25rem;
 }
+/* --------------------------------------------------- Google Drive sync widget */
+.sync {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sync__connect {
+  padding-inline: 0.6rem;
+}
+.sync__chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.sync__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 0.3rem;
+  border-radius: 999px;
+  background: var(--status-todo);
+}
+.sync__dot[data-status='synced'] {
+  background: var(--status-done);
+}
+.sync__dot[data-status='syncing'],
+.sync__dot[data-status='connecting'] {
+  background: var(--status-doing);
+  animation: sync-pulse 1.1s var(--ease) infinite;
+}
+.sync__dot[data-status='error'],
+.sync__dot[data-status='reconnect'] {
+  background: #c0362c;
+}
+@keyframes sync-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.sync__chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+.sync__state {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.sync__email {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.sync__meta {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+.sync__error-text {
+  font-size: 0.72rem;
+  color: #c0362c;
+  overflow-wrap: anywhere;
+}
+.sync__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.sync__btn {
+  padding-inline: 0.7rem;
+}
+@media (max-width: 480px) {
+  .sync {
+    align-items: stretch;
+  }
+  .sync__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .dashboard__empty {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);

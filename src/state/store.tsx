@@ -16,6 +16,7 @@ import {
 import { createChart, duplicateChart as duplicateChartOp, type CreateChartOptions } from '../model/factory';
 import { loadState, saveState } from '../model/storage';
 import type { AppState, Chart } from '../model/types';
+import { recordChartDeletion } from '../sync/metadata';
 
 type StoreAction =
   | { type: 'CREATE_CHART'; chart: Chart }
@@ -23,7 +24,8 @@ type StoreAction =
   | { type: 'CLOSE_CHART' }
   | { type: 'MUTATE_ACTIVE'; fn: (chart: Chart) => Chart }
   | { type: 'DUPLICATE_CHART'; id: string }
-  | { type: 'DELETE_CHART'; id: string };
+  | { type: 'DELETE_CHART'; id: string }
+  | { type: 'REPLACE_CHARTS'; charts: Chart[] };
 
 function reducer(state: AppState, action: StoreAction): AppState {
   switch (action.type) {
@@ -64,6 +66,15 @@ function reducer(state: AppState, action: StoreAction): AppState {
       const activeChartId = state.activeChartId === action.id ? null : state.activeChartId;
       return { ...state, charts, activeChartId };
     }
+    case 'REPLACE_CHARTS': {
+      // Wholesale replacement after a sync merge. Keep the open chart if it
+      // survived the merge, otherwise fall back to the dashboard.
+      const activeChartId =
+        state.activeChartId !== null && action.charts.some((c) => c.id === state.activeChartId)
+          ? state.activeChartId
+          : null;
+      return { ...state, charts: action.charts, activeChartId };
+    }
   }
 }
 
@@ -78,6 +89,8 @@ interface Store {
   mutateActive: (fn: (chart: Chart) => Chart) => void;
   duplicateChart: (id: string) => void;
   deleteChart: (id: string) => void;
+  /** Replace the entire chart list (used by the sync controller after a merge). */
+  replaceCharts: (charts: Chart[]) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -120,7 +133,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (id: string) => dispatch({ type: 'DUPLICATE_CHART', id }),
     [],
   );
-  const deleteChart = useCallback((id: string) => dispatch({ type: 'DELETE_CHART', id }), []);
+  const deleteChart = useCallback((id: string) => {
+    // Record a tombstone first (only takes effect when sync is enabled) so the
+    // deletion propagates instead of being resurrected by a stale remote copy.
+    recordChartDeletion(id);
+    dispatch({ type: 'DELETE_CHART', id });
+  }, []);
+  const replaceCharts = useCallback(
+    (charts: Chart[]) => dispatch({ type: 'REPLACE_CHARTS', charts }),
+    [],
+  );
 
   const activeChart = useMemo(
     () => state.charts.find((c) => c.id === state.activeChartId) ?? null,
@@ -138,6 +160,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutateActive,
       duplicateChart,
       deleteChart,
+      replaceCharts,
     }),
     [
       state,
@@ -149,6 +172,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutateActive,
       duplicateChart,
       deleteChart,
+      replaceCharts,
     ],
   );
 
