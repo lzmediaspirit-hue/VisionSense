@@ -18,6 +18,9 @@ export interface Action {
   id: string;
   text: string; // '' = unfilled cell
   status: StoredStatus;
+  description: string; // '' = none; extended notes shown in the detail dialog (v1.1)
+  reward: string; // '' = none; celebrated with a toast on completion (v1.1)
+  completedAt: string | null; // ISO set when this entered 'done', cleared on leaving (v1.1)
 }
 
 export interface Pillar {

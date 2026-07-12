@@ -12,6 +12,8 @@ export interface CellProps {
   registerRef?: (row: number, col: number, el: HTMLDivElement | null) => void;
   onCommitText: (cell: GridCell, text: string) => void;
   onCycleStatus: (cell: GridCell) => void;
+  /** Open the action detail dialog (v1.1). Provided only for action cells. */
+  onExpand?: (cell: GridCell) => void;
   onHighlightPillar?: (pillarIndex: number | null) => void;
   onFocusCell?: (row: number, col: number) => void;
   /** Provided for pillar cells to render a thin completion bar. */
@@ -41,6 +43,7 @@ function CellImpl(props: CellProps) {
     registerRef,
     onCommitText,
     onCycleStatus,
+    onExpand,
     onHighlightPillar,
     onFocusCell,
     progress,
@@ -55,6 +58,9 @@ function CellImpl(props: CellProps) {
   const isFilled = cell.text.trim() !== '';
   const isPillarName = cell.kind === 'pillar';
   const isAction = cell.kind === 'action';
+  const canExpand = isAction && isFilled && !!onExpand;
+  const hasDetails =
+    isAction && ((cell.description ?? '').trim() !== '' || (cell.reward ?? '').trim() !== '');
 
   // Register/unregister DOM node for grid focus management.
   useEffect(() => {
@@ -107,6 +113,12 @@ function CellImpl(props: CellProps) {
       e.preventDefault();
       e.stopPropagation();
       beginEdit();
+    } else if ((e.key === 'e' || e.key === 'E') && canExpand) {
+      // Keyboard path to the detail dialog from a focused action cell (the
+      // expand button is also reachable via Tab). Documented in SPEC 7.1 notes.
+      e.preventDefault();
+      e.stopPropagation();
+      onExpand?.(cell);
     }
   };
 
@@ -206,6 +218,35 @@ function CellImpl(props: CellProps) {
         >
           <StatusGlyph status={cell.status ?? 'todo'} />
         </button>
+      )}
+
+      {canExpand && !editing && (
+        <button
+          type="button"
+          className="cell__expand"
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand?.(cell);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          aria-label={`Open details for ${cell.text}`}
+          title="Details"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path
+              d="M6 3.5h6.5V10 M12.5 3.5l-6 6 M8.5 12.5H3.5V7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
+
+      {hasDetails && !editing && (
+        <span className="cell__detail-dot" aria-hidden="true" title="Has details" />
       )}
     </div>
   );

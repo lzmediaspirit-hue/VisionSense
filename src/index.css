@@ -352,6 +352,249 @@ button {
 .modal--confirm .modal__title {
   margin-bottom: 0.5rem;
 }
+.modal-overlay--wide {
+  max-width: min(720px, 94vw);
+}
+.modal__close {
+  flex: 0 0 auto;
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 0.15rem 0.5rem;
+  color: var(--text-muted);
+}
+.modal__eyebrow {
+  font-size: var(--fs-meta);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.9rem;
+}
+
+/* ---------------------------------------------- action detail dialog (7.1) */
+.field {
+  display: block;
+  margin-bottom: 0.9rem;
+}
+.field__label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+.field__input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.6rem;
+}
+.field__input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.field__textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+  line-height: 1.45;
+}
+.field__hint {
+  display: block;
+  font-size: var(--fs-meta);
+  color: var(--text-faint);
+  margin-top: 0.3rem;
+}
+
+/* segmented status control (detail dialog) */
+.status-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.status-seg__btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 550;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.status-seg__btn:hover {
+  color: var(--text);
+}
+.status-seg__btn.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+.status-seg__btn--doing.is-active {
+  color: var(--status-doing);
+}
+.status-seg__btn--done.is-active {
+  color: var(--status-done);
+}
+
+/* ------------------------------------------------- progress dialog (7.2) */
+.progress-summary {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+.progress-summary__stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.progress-summary__num {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.progress-summary__unit {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.progress-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  margin-bottom: 1rem;
+}
+.progress-tabs__tab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 550;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.progress-tabs__tab:hover {
+  color: var(--text);
+}
+.progress-tabs__tab.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+.progress-panel {
+  min-width: 0;
+}
+
+/* hand-rolled bar chart */
+.barchart {
+  margin: 0;
+}
+.barchart__svg {
+  display: block;
+  width: 100%;
+  height: 200px;
+  overflow: visible;
+}
+.barchart__axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.barchart__bar {
+  fill: var(--accent);
+  transition: fill 0.12s var(--ease);
+}
+.barchart__bar:hover {
+  fill: color-mix(in srgb, var(--accent) 78%, var(--text));
+}
+.barchart__label {
+  fill: var(--text-faint);
+  font-size: 10px;
+  font-family: var(--font-sans);
+}
+.barchart__caption {
+  margin-top: 0.5rem;
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ------------------------------------------------------- reward toast (7.3) */
+.toast-region {
+  position: fixed;
+  left: 50%;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 50;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  pointer-events: auto;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0.6rem 0.75rem 0.6rem 0.95rem;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.22);
+  animation: toast-in 0.28s var(--ease);
+}
+.toast__glyph {
+  display: inline-flex;
+  color: var(--status-doing);
+}
+.toast__text {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toast__close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.toast__close:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
 
 .template-list {
   list-style: none;
@@ -656,6 +899,57 @@ button {
   height: 100%;
   background: var(--cell-accent);
   transition: width 0.25s var(--ease);
+}
+
+/* detail expand affordance (v1.1). Hidden until the cell is hovered/focused;
+   always visible on coarse (touch) pointers where there's no hover. */
+.cell__expand {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: none;
+  padding: 0;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.12s var(--ease), color 0.12s var(--ease), background 0.12s var(--ease);
+}
+.cell:hover .cell__expand,
+.cell:focus-within .cell__expand {
+  opacity: 1;
+}
+.cell__expand:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, var(--surface));
+}
+.cell__expand:focus-visible {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .cell__expand {
+    opacity: 1;
+  }
+}
+
+/* "has description/reward" indicator dot. */
+.cell__detail-dot {
+  position: absolute;
+  left: 5px;
+  bottom: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--cell-accent, var(--accent));
+  opacity: 0.85;
+}
+.status-done .cell__detail-dot {
+  background: var(--done-text);
 }
 
 /* status control */

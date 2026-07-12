@@ -12,6 +12,10 @@ describe('factory / Rule of 8', () => {
         expect(action.text).toBe('');
         expect(action.status).toBe('todo');
         expect(typeof action.id).toBe('string');
+        // v1.1 fields default to empty / null.
+        expect(action.description).toBe('');
+        expect(action.reward).toBe('');
+        expect(action.completedAt).toBeNull();
       }
     }
   });

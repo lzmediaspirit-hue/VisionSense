@@ -80,7 +80,35 @@ export function setActionText(
   return replaceAction(chart, pillarIndex, actionIndex, { ...action, text }, now);
 }
 
-/** Set an action's stored status explicitly. */
+/** Set an action's free-text details (description / reward). Only provided
+ * fields change; passing neither is a no-op. Does not touch status. */
+export function setActionDetails(
+  chart: Chart,
+  pillarIndex: number,
+  actionIndex: number,
+  details: { description?: string; reward?: string },
+  now: Clock = defaultNow,
+): Chart {
+  if (!inRange(pillarIndex) || !inRange(actionIndex)) return chart;
+  const action = chart.pillars[pillarIndex].actions[actionIndex];
+  const description = details.description ?? action.description;
+  const reward = details.reward ?? action.reward;
+  if (description === action.description && reward === action.reward) return chart;
+  return replaceAction(chart, pillarIndex, actionIndex, { ...action, description, reward }, now);
+}
+
+/**
+ * Apply a status transition to an action, keeping `completedAt` honest:
+ * entering 'done' stamps it with `now()`, leaving 'done' clears it to null.
+ * Re-entering 'done' from 'done' would be a no-op upstream, so its existing
+ * timestamp is preserved.
+ */
+function withStatus(action: Action, status: StoredStatus, now: Clock): Action {
+  const completedAt = status === 'done' ? now() : null;
+  return { ...action, status, completedAt };
+}
+
+/** Set an action's stored status explicitly (maintains `completedAt`). */
 export function setActionStatus(
   chart: Chart,
   pillarIndex: number,
@@ -91,7 +119,7 @@ export function setActionStatus(
   if (!inRange(pillarIndex) || !inRange(actionIndex)) return chart;
   const action = chart.pillars[pillarIndex].actions[actionIndex];
   if (action.status === status) return chart;
-  return replaceAction(chart, pillarIndex, actionIndex, { ...action, status }, now);
+  return replaceAction(chart, pillarIndex, actionIndex, withStatus(action, status, now), now);
 }
 
 /** The next status in the todo -> doing -> done -> todo cycle. */
@@ -119,7 +147,7 @@ export function cycleActionStatus(
     chart,
     pillarIndex,
     actionIndex,
-    { ...action, status: nextStatus(action.status) },
+    withStatus(action, nextStatus(action.status), now),
     now,
   );
 }

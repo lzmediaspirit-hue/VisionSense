@@ -49,7 +49,13 @@ function validateAction(v: unknown): Action | null {
   const { id, text, status } = v;
   if (typeof id !== 'string' || typeof text !== 'string') return null;
   if (typeof status !== 'string' || !STORED_STATUSES.has(status)) return null;
-  return { id, text, status: status as StoredStatus };
+  // v1.1 fields are additive + optional: DEFAULT them when absent (or the wrong
+  // type) rather than rejecting, so pre-v1.1 localStorage blobs and previously
+  // exported JSON files (which lack these keys) still load/import cleanly.
+  const description = typeof v.description === 'string' ? v.description : '';
+  const reward = typeof v.reward === 'string' ? v.reward : '';
+  const completedAt = typeof v.completedAt === 'string' ? v.completedAt : null;
+  return { id, text, status: status as StoredStatus, description, reward, completedAt };
 }
 
 function validatePillar(v: unknown): Pillar | null {

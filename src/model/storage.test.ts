@@ -85,4 +85,54 @@ describe('storage', () => {
     expect(() => saveState(sampleState(), null)).not.toThrow();
     expect(loadState(null)).toEqual(createInitialState());
   });
+
+  // --- v1.1 backward compatibility (SPEC 7.4) --------------------------------
+
+  it('loads a pre-v1.1 blob (actions lacking description/reward/completedAt) with defaults', () => {
+    // Hand-build a schemaVersion 1 blob whose actions are the OLD shape: only
+    // id/text/status, none of the v1.1 keys. This mirrors data written by an
+    // earlier build still sitting in a returning user's localStorage.
+    const state = sampleState();
+    const legacy = {
+      ...state,
+      charts: state.charts.map((c) => ({
+        ...c,
+        pillars: c.pillars.map((p) => ({
+          ...p,
+          actions: p.actions.map((a) => ({ id: a.id, text: a.text, status: a.status })),
+        })),
+      })),
+    };
+    storage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+
+    const loaded = loadState(storage);
+    // Not treated as corrupt: no backup written, real charts returned.
+    expect(storage.getItem(BACKUP_KEY)).toBeNull();
+    expect(loaded.charts).toHaveLength(1);
+    for (const pillar of loaded.charts[0].pillars) {
+      for (const action of pillar.actions) {
+        expect(action.description).toBe('');
+        expect(action.reward).toBe('');
+        expect(action.completedAt).toBeNull();
+      }
+    }
+  });
+
+  it('preserves present v1.1 fields on load', () => {
+    const state = sampleState();
+    state.charts[0].pillars[0].actions[0] = {
+      ...state.charts[0].pillars[0].actions[0],
+      text: 'Squat',
+      status: 'done',
+      description: 'Back squat 5x5',
+      reward: 'Protein shake',
+      completedAt: '2024-03-01T12:00:00.000Z',
+    };
+    saveState(state, storage);
+    const loaded = loadState(storage);
+    const action = loaded.charts[0].pillars[0].actions[0];
+    expect(action.description).toBe('Back squat 5x5');
+    expect(action.reward).toBe('Protein shake');
+    expect(action.completedAt).toBe('2024-03-01T12:00:00.000Z');
+  });
 });

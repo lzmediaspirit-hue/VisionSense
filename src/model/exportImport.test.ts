@@ -77,6 +77,45 @@ describe('exportImport', () => {
     expect(parseChartImport(JSON.stringify(null)).ok).toBe(false);
   });
 
+  it('imports a pre-v1.1 export file (actions lacking the new fields), defaulting them', () => {
+    // Hand-write an OLD export envelope: valid v1.0 shape, but its actions have
+    // no description/reward/completedAt. It must import cleanly (SPEC 7.4).
+    const chart = sampleChart();
+    const legacyEnvelope = {
+      kind: CHART_EXPORT_KIND,
+      schemaVersion: CHART_EXPORT_VERSION,
+      exportedAt: '2023-06-01T00:00:00.000Z',
+      chart: {
+        ...chart,
+        pillars: chart.pillars.map((p) => ({
+          ...p,
+          actions: p.actions.map((a) => ({ id: a.id, text: a.text, status: a.status })),
+        })),
+      },
+    };
+    const result = parseChartImport(JSON.stringify(legacyEnvelope));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const pillar of result.chart.pillars) {
+      for (const action of pillar.actions) {
+        expect(action.description).toBe('');
+        expect(action.reward).toBe('');
+        expect(action.completedAt).toBeNull();
+      }
+    }
+  });
+
+  it('round-trips the v1.1 fields through export -> import', () => {
+    const chart = sampleChart();
+    const json = serializeChartExport(chart);
+    // The serialized JSON literally contains the new keys.
+    expect(json).toContain('completedAt');
+    expect(json).toContain('description');
+    expect(json).toContain('reward');
+    const result = parseChartImport(json);
+    expect(result.ok).toBe(true);
+  });
+
   it('every rejection carries a non-empty, user-facing error string', () => {
     const bads = ['not json', '{}', '[]', JSON.stringify({ kind: CHART_EXPORT_KIND })];
     for (const raw of bads) {

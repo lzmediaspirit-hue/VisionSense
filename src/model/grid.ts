@@ -53,6 +53,10 @@ export interface GridCell {
   status: StoredStatus | null;
   /** Pillar color token (for pillar + action cells). */
   color: string | null;
+  /** Action detail fields (v1.1); null for non-action cells. */
+  description: string | null;
+  reward: string | null;
+  completedAt: string | null;
 }
 
 export interface GridBlock {
@@ -76,6 +80,9 @@ function centerBlockCell(chart: Chart, offset: number): GridCell {
       text: chart.goal,
       status: null,
       color: null,
+      description: null,
+      reward: null,
+      completedAt: null,
     };
   }
   const pillarIndex = orderToPillarIndex(offset);
@@ -90,6 +97,9 @@ function centerBlockCell(chart: Chart, offset: number): GridCell {
     text: pillar.name,
     status: null,
     color: pillar.color,
+    description: null,
+    reward: null,
+    completedAt: null,
   };
 }
 
@@ -106,6 +116,9 @@ function outerBlockCell(chart: Chart, pillarIndex: number, offset: number): Grid
       text: pillar.name,
       status: null,
       color: pillar.color,
+      description: null,
+      reward: null,
+      completedAt: null,
     };
   }
   const actionIndex = orderToPillarIndex(offset);
@@ -120,6 +133,9 @@ function outerBlockCell(chart: Chart, pillarIndex: number, offset: number): Grid
     text: action.text,
     status: action.status,
     color: pillar.color,
+    description: action.description,
+    reward: action.reward,
+    completedAt: action.completedAt,
   };
 }
 
