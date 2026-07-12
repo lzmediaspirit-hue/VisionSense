@@ -10,7 +10,8 @@
 // a quick test without rebuilding, injects one at runtime via localStorage:
 //   localStorage.setItem('visionsense.sync.clientId', '<id>.apps.googleusercontent.com')
 
-export const GOOGLE_CLIENT_ID = '';
+export const GOOGLE_CLIENT_ID =
+  '374383189137-818jgqebact635jn1q4ir41k24v49rml.apps.googleusercontent.com';
 
 /** localStorage key the owner/QA can set to override the compiled-in client ID. */
 export const CLIENT_ID_OVERRIDE_KEY = 'visionsense.sync.clientId';
