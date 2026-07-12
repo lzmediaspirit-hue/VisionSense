@@ -3,7 +3,14 @@
 // There is deliberately no addPillar/addAction/removePillar/removeAction — the
 // Rule of 8 is structural (see factory.ts).
 
-import { RULE_OF_8, type Action, type Chart, type Pillar, type StoredStatus } from './types';
+import {
+  RULE_OF_8,
+  type Action,
+  type Chart,
+  type Pillar,
+  type StoredStatus,
+  type ThemeId,
+} from './types';
 
 type Clock = () => string;
 
@@ -21,6 +28,12 @@ function inRange(index: number): boolean {
 export function setGoal(chart: Chart, goal: string, now: Clock = defaultNow): Chart {
   if (chart.goal === goal) return chart;
   return touch({ ...chart, goal }, now);
+}
+
+/** Switch a chart's theme ("costume"). Pure CSS — no effect on stored data. */
+export function setTheme(chart: Chart, themeId: ThemeId, now: Clock = defaultNow): Chart {
+  if (chart.themeId === themeId) return chart;
+  return touch({ ...chart, themeId }, now);
 }
 
 /** Rename a pillar (single source of truth for hub + outer-block center). */

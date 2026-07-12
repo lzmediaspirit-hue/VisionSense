@@ -13,7 +13,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import { createChart, type CreateChartOptions } from '../model/factory';
+import { createChart, duplicateChart as duplicateChartOp, type CreateChartOptions } from '../model/factory';
 import { loadState, saveState } from '../model/storage';
 import type { AppState, Chart } from '../model/types';
 
@@ -21,7 +21,9 @@ type StoreAction =
   | { type: 'CREATE_CHART'; chart: Chart }
   | { type: 'OPEN_CHART'; id: string }
   | { type: 'CLOSE_CHART' }
-  | { type: 'MUTATE_ACTIVE'; fn: (chart: Chart) => Chart };
+  | { type: 'MUTATE_ACTIVE'; fn: (chart: Chart) => Chart }
+  | { type: 'DUPLICATE_CHART'; id: string }
+  | { type: 'DELETE_CHART'; id: string };
 
 function reducer(state: AppState, action: StoreAction): AppState {
   switch (action.type) {
@@ -48,6 +50,20 @@ function reducer(state: AppState, action: StoreAction): AppState {
       });
       return changed ? { ...state, charts } : state;
     }
+    case 'DUPLICATE_CHART': {
+      const index = state.charts.findIndex((c) => c.id === action.id);
+      if (index === -1) return state;
+      const copy = duplicateChartOp(state.charts[index]);
+      const charts = state.charts.slice();
+      charts.splice(index + 1, 0, copy);
+      return { ...state, charts };
+    }
+    case 'DELETE_CHART': {
+      if (!state.charts.some((c) => c.id === action.id)) return state;
+      const charts = state.charts.filter((c) => c.id !== action.id);
+      const activeChartId = state.activeChartId === action.id ? null : state.activeChartId;
+      return { ...state, charts, activeChartId };
+    }
   }
 }
 
@@ -55,9 +71,13 @@ interface Store {
   state: AppState;
   activeChart: Chart | null;
   createBlankChart: (options?: CreateChartOptions) => void;
+  /** Import an already-built (and already-validated) chart, e.g. from a JSON file. */
+  importChart: (chart: Chart) => void;
   openChart: (id: string) => void;
   closeChart: () => void;
   mutateActive: (fn: (chart: Chart) => Chart) => void;
+  duplicateChart: (id: string) => void;
+  deleteChart: (id: string) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -87,12 +107,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const createBlankChart = useCallback((options?: CreateChartOptions) => {
     dispatch({ type: 'CREATE_CHART', chart: createChart(options) });
   }, []);
+  const importChart = useCallback((chart: Chart) => {
+    dispatch({ type: 'CREATE_CHART', chart });
+  }, []);
   const openChart = useCallback((id: string) => dispatch({ type: 'OPEN_CHART', id }), []);
   const closeChart = useCallback(() => dispatch({ type: 'CLOSE_CHART' }), []);
   const mutateActive = useCallback(
     (fn: (chart: Chart) => Chart) => dispatch({ type: 'MUTATE_ACTIVE', fn }),
     [],
   );
+  const duplicateChart = useCallback(
+    (id: string) => dispatch({ type: 'DUPLICATE_CHART', id }),
+    [],
+  );
+  const deleteChart = useCallback((id: string) => dispatch({ type: 'DELETE_CHART', id }), []);
 
   const activeChart = useMemo(
     () => state.charts.find((c) => c.id === state.activeChartId) ?? null,
@@ -104,11 +132,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       state,
       activeChart,
       createBlankChart,
+      importChart,
       openChart,
       closeChart,
       mutateActive,
+      duplicateChart,
+      deleteChart,
     }),
-    [state, activeChart, createBlankChart, openChart, closeChart, mutateActive],
+    [
+      state,
+      activeChart,
+      createBlankChart,
+      importChart,
+      openChart,
+      closeChart,
+      mutateActive,
+      duplicateChart,
+      deleteChart,
+    ],
   );
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;

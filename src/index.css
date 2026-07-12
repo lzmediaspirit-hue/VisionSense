@@ -75,10 +75,38 @@ button {
   color: var(--text);
   border-color: transparent;
 }
+.btn--danger {
+  background: #c0362c;
+  border-color: #c0362c;
+  color: #fff;
+}
+.btn--danger:hover {
+  filter: brightness(1.08);
+}
+.btn--danger-text {
+  color: #c0362c;
+}
+.btn--danger-text:hover {
+  background: color-mix(in srgb, #c0362c 12%, transparent);
+  color: #c0362c;
+  border-color: transparent;
+}
 
 :focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* -------------------------------------------------------------- dashboard */
@@ -114,6 +142,25 @@ button {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+.dashboard__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.dashboard__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: color-mix(in srgb, #c0362c 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, #c0362c 35%, var(--border));
+  color: #8a2820;
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  margin-bottom: 1.25rem;
+}
 .dashboard__empty {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
@@ -142,32 +189,216 @@ button {
   gap: 0.75rem;
 }
 .chart-card {
-  width: 100%;
-  text-align: left;
-  display: grid;
-  gap: 0.3rem;
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 1rem 1.15rem;
+  padding: 0.6rem;
   transition: border-color 0.15s var(--ease), transform 0.1s var(--ease);
 }
 .chart-card:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
 }
+.chart-card__open {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0.4rem 0.55rem;
+  min-width: 0;
+}
+.chart-card__swatch {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  margin-top: 0.1rem;
+  border-radius: 999px;
+  background: var(--goal-bg);
+  box-shadow: inset 0 0 0 2px var(--surface), 0 0 0 1px var(--border);
+}
+.chart-card__body {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
 .chart-card__title {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chart-card__meta {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+.chart-card__progress {
+  display: block;
+  height: 5px;
+  width: min(220px, 100%);
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.chart-card__progress-fill {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+}
+.chart-card__progress-done {
+  display: block;
+  height: 100%;
+  background: var(--status-done);
+}
 .chart-card__date {
   font-size: 0.72rem;
   color: var(--text-faint);
+}
+.chart-card__actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+}
+.chart-card__actions .btn {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+  justify-content: center;
+}
+
+/* ------------------------------------------------------------ theme swatches */
+.theme-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.theme-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background: transparent;
+}
+.theme-swatch.is-active {
+  border-color: var(--accent);
+}
+.theme-swatch__preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--goal-bg);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+/* ------------------------------------------------------------------- modals */
+.modal-overlay {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: min(560px, 92vw);
+  width: 100%;
+  border-radius: var(--radius);
+  overflow: visible;
+}
+.modal-overlay::backdrop {
+  background: rgba(10, 14, 22, 0.55);
+  backdrop-filter: blur(2px);
+}
+.modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem 1.4rem;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+  color: var(--text);
+}
+.modal--wide {
+  max-width: none;
+}
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.4rem;
+}
+.modal__title {
+  font-size: 1.1rem;
+  font-weight: 650;
+  color: var(--text);
+}
+.modal__hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.modal--confirm .modal__title {
+  margin-bottom: 0.5rem;
+}
+
+.template-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.65rem;
+}
+.template-card {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  transition: border-color 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.template-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.template-card__swatch {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--goal-bg);
+  box-shadow: inset 0 0 0 2px var(--surface-2), 0 0 0 1px var(--border);
+}
+.template-card__body {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.template-card__label {
+  font-weight: 650;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+.template-card__desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 /* ----------------------------------------------------------- chart screen */
@@ -216,6 +447,24 @@ button {
   color: var(--text-faint);
   margin-top: 0.5rem;
   text-align: center;
+}
+.chart-header__tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.chart-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.chart-header__actions .btn {
+  font-size: 0.78rem;
+  padding: 0.4rem 0.75rem;
 }
 
 .progress-strip {
@@ -556,5 +805,66 @@ button {
 @media (min-width: 900px) {
   .blockview {
     display: none;
+  }
+}
+
+/* ----------------------------------------------------------------- print ---
+ * The print stylesheet is the app's "PDF export" (SPEC 4.2): one landscape
+ * page showing ONLY the full 9x9 grid, no app chrome. ChartScreen forces the
+ * full <Grid> (never block view) while printing via usePrintMode(), so this
+ * only needs to hide everything except .grid and size the page/grid to fit. */
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    overflow: visible;
+    background: #fff;
+  }
+
+  .dashboard,
+  .chart-header,
+  .blockview__bar,
+  .minimap,
+  .cell__progress {
+    display: none !important;
+  }
+
+  /* Status glyph stays visible in print (it's how "done" reads at a glance
+     on paper) but shouldn't look like a clickable button. */
+  .cell__status {
+    position: absolute;
+    background: none !important;
+  }
+
+  .chart-screen {
+    min-height: 0;
+    background: #fff;
+  }
+  .chart-main {
+    padding: 0;
+    display: block;
+  }
+
+  .grid {
+    max-width: none;
+    width: 100%;
+    height: 100vh;
+    box-shadow: none;
+    page-break-inside: avoid;
+  }
+  .block {
+    box-shadow: none;
+  }
+  .cell {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .cell__text {
+    -webkit-line-clamp: 6;
+    line-clamp: 6;
   }
 }

@@ -36,7 +36,8 @@ function defaultStorage(): StorageLike | null {
 
 // --- Validation ---------------------------------------------------------------
 
-function isObject(v: unknown): v is Record<string, unknown> {
+/** Exported for reuse by exportImport.ts (JSON import needs the same strictness). */
+export function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
@@ -67,7 +68,9 @@ function validatePillar(v: unknown): Pillar | null {
   return { id, name, color, actions: validated };
 }
 
-function validateChart(v: unknown): Chart | null {
+/** Exported for reuse by exportImport.ts (a single imported chart gets the same
+ * strict structural validation as a chart loaded from localStorage). */
+export function validateChart(v: unknown): Chart | null {
   if (!isObject(v)) return null;
   const { id, goal, themeId, templateId, pillars, createdAt, updatedAt } = v;
   if (typeof id !== 'string' || typeof goal !== 'string') return null;

@@ -68,6 +68,26 @@ export function createChart(options: CreateChartOptions = {}): Chart {
   };
 }
 
+/**
+ * Duplicate a chart: a fresh id/timestamps and fresh ids for every pillar and
+ * action (so the copy never shares identity with the original), but otherwise
+ * identical content (goal, names, actions, statuses, theme).
+ */
+export function duplicateChart(chart: Chart, now: () => string = () => new Date().toISOString()): Chart {
+  const ts = now();
+  return {
+    ...chart,
+    id: newId(),
+    pillars: chart.pillars.map((pillar) => ({
+      ...pillar,
+      id: newId(),
+      actions: pillar.actions.map((action) => ({ ...action, id: newId() })),
+    })),
+    createdAt: ts,
+    updatedAt: ts,
+  };
+}
+
 export function createInitialState(): {
   schemaVersion: 1;
   charts: Chart[];

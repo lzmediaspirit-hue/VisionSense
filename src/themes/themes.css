@@ -49,6 +49,9 @@
   --accent: #3b6ef6;
 
   --goal-bg: linear-gradient(155deg, #2a3550 0%, #1c2438 100%);
+  /* Flat fallback of --goal-bg for contexts that can't render a gradient
+     (canvas PNG export). Kept in sync with the gradient's dark stop. */
+  --goal-bg-solid: #1c2438;
   --goal-text: #ffffff;
   --goal-muted: #b9c2d8;
   --goal-border: #10182b;
@@ -68,4 +71,131 @@
   --pillar-color-5: #1f7fc4;
   --pillar-color-6: #2f9e52;
   --pillar-color-7: #dd6a2c;
+}
+
+/* ---- stadium (athlete) -----------------------------------------------------
+ * Turf green + jersey colors. Cell backgrounds (--surface/--surface-2) stay
+ * light so cell text keeps the same high contrast as minimal; the "costume"
+ * lives in the grid seams, the goal cell, and the pillar accent colors, none
+ * of which carry body text. */
+[data-theme='stadium'] {
+  --bg: #eef6f0;
+  --surface: #ffffff;
+  --surface-2: #e6f2ea;
+  --grid-bg: #123420;
+
+  --text: #16241c;
+  --text-muted: #4c6357;
+  --text-faint: #93a89b;
+
+  --border: #1f4a2c;
+  --border-strong: #0f2818;
+  --focus-ring: #ffb703;
+
+  --accent: #1f7a3d;
+
+  --goal-bg: linear-gradient(155deg, #123420 0%, #081a10 100%);
+  --goal-bg-solid: #081a10;
+  --goal-text: #ffffff;
+  --goal-muted: #bfe3cc;
+  --goal-border: #05100a;
+
+  --status-todo: #9aa79d;
+  --status-doing: #d97706;
+  --status-done: #16a34a;
+  --done-bg: #eafaf0;
+  --done-text: #166534;
+
+  /* 8 pillar slot colors — "jersey" palette */
+  --pillar-color-0: #d62828;
+  --pillar-color-1: #003f88;
+  --pillar-color-2: #ca8a04;
+  --pillar-color-3: #2a9d8f;
+  --pillar-color-4: #6a4c93;
+  --pillar-color-5: #e76f51;
+  --pillar-color-6: #588157;
+  --pillar-color-7: #1d3557;
+}
+
+/* ---- marquee (actor) -------------------------------------------------------
+ * Theater marquee: cream cell surfaces (keeps text readable) with a black +
+ * gold "backstage" costume in the grid seams and the goal cell. */
+[data-theme='marquee'] {
+  --bg: #f7efe2;
+  --surface: #fffaf1;
+  --surface-2: #f3e6d2;
+  --grid-bg: #2b1b1f;
+
+  --text: #241a12;
+  --text-muted: #6b5a45;
+  --text-faint: #a8977e;
+
+  --border: #4a1e28;
+  --border-strong: #170f12;
+  --focus-ring: #d4af37;
+
+  --accent: #8c1c34;
+
+  --goal-bg: linear-gradient(155deg, #1a1215 0%, #000000 100%);
+  --goal-bg-solid: #000000;
+  --goal-text: #f4d675;
+  --goal-muted: #cbb37a;
+  --goal-border: #000000;
+
+  --status-todo: #b8a888;
+  --status-doing: #c9822a;
+  --status-done: #2f8f5b;
+  --done-bg: #eef7f0;
+  --done-text: #1f6b43;
+
+  /* 8 pillar slot colors — footlights + curtain palette */
+  --pillar-color-0: #b5121b;
+  --pillar-color-1: #d4af37;
+  --pillar-color-2: #1f4e79;
+  --pillar-color-3: #6a2135;
+  --pillar-color-4: #2f5233;
+  --pillar-color-5: #8a5a2b;
+  --pillar-color-6: #4a3b6b;
+  --pillar-color-7: #3a2f33;
+}
+
+/* ---- campus (student) -------------------------------------------------------
+ * Collegiate navy + crimson on paper-light surfaces. */
+[data-theme='campus'] {
+  --bg: #eef1f7;
+  --surface: #ffffff;
+  --surface-2: #f3f6fb;
+  --grid-bg: #dbe2ee;
+
+  --text: #1c2a44;
+  --text-muted: #5b6a85;
+  --text-faint: #9aa6bb;
+
+  --border: #b9c4d9;
+  --border-strong: #24406b;
+  --focus-ring: #b3122a;
+
+  --accent: #1c3f6e;
+
+  --goal-bg: linear-gradient(155deg, #1c3f6e 0%, #0f2543 100%);
+  --goal-bg-solid: #0f2543;
+  --goal-text: #ffffff;
+  --goal-muted: #c3d0e6;
+  --goal-border: #0a1c34;
+
+  --status-todo: #aab4c8;
+  --status-doing: #c9852c;
+  --status-done: #1f7a45;
+  --done-bg: #eaf6ee;
+  --done-text: #1c6b3d;
+
+  /* 8 pillar slot colors — varsity palette */
+  --pillar-color-0: #b3122a;
+  --pillar-color-1: #1c3f6e;
+  --pillar-color-2: #c98a1c;
+  --pillar-color-3: #2f7d5a;
+  --pillar-color-4: #6a3f8f;
+  --pillar-color-5: #2b7f96;
+  --pillar-color-6: #8a4b2b;
+  --pillar-color-7: #4a4a4a;
 }
