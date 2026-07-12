@@ -567,7 +567,8 @@ button {
   line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
   width: 100%;
 }
 .cell__placeholder {
