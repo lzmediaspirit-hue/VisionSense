@@ -27,6 +27,7 @@ export function createAction(): Action {
     established: false,
     completions: [],
     cue: '',
+    weeklyTarget: 0,
   };
 }
 

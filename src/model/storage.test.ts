@@ -223,6 +223,58 @@ describe('storage', () => {
     }
   });
 
+  // --- v1.5 backward compatibility (SPEC 12.5) --------------------------------
+
+  it('defaults weeklyTarget to 0 when absent, wrong type, negative, > 7, or a float', () => {
+    const state = sampleState();
+    const raw = JSON.parse(JSON.stringify(state));
+    // absent
+    raw.charts[0].pillars[0].actions[0] = { ...raw.charts[0].pillars[0].actions[0] };
+    delete raw.charts[0].pillars[0].actions[0].weeklyTarget;
+    // wrong type
+    raw.charts[0].pillars[0].actions[1] = {
+      ...raw.charts[0].pillars[0].actions[1],
+      weeklyTarget: '3',
+    };
+    // negative
+    raw.charts[0].pillars[0].actions[2] = {
+      ...raw.charts[0].pillars[0].actions[2],
+      weeklyTarget: -1,
+    };
+    // > 7
+    raw.charts[0].pillars[0].actions[3] = {
+      ...raw.charts[0].pillars[0].actions[3],
+      weeklyTarget: 8,
+    };
+    // float
+    raw.charts[0].pillars[0].actions[4] = {
+      ...raw.charts[0].pillars[0].actions[4],
+      weeklyTarget: 2.5,
+    };
+    storage.setItem(STORAGE_KEY, JSON.stringify(raw));
+
+    const loaded = loadState(storage);
+    expect(storage.getItem(BACKUP_KEY)).toBeNull(); // additive, not corrupt
+    const actions = loaded.charts[0].pillars[0].actions;
+    expect(actions[0].weeklyTarget).toBe(0);
+    expect(actions[1].weeklyTarget).toBe(0);
+    expect(actions[2].weeklyTarget).toBe(0);
+    expect(actions[3].weeklyTarget).toBe(0);
+    expect(actions[4].weeklyTarget).toBe(0);
+  });
+
+  it('round-trips a valid weeklyTarget', () => {
+    const state = sampleState();
+    state.charts[0].pillars[0].actions[0] = {
+      ...state.charts[0].pillars[0].actions[0],
+      habit: true,
+      weeklyTarget: 3,
+    };
+    saveState(state, storage);
+    const loaded = loadState(storage);
+    expect(loaded.charts[0].pillars[0].actions[0].weeklyTarget).toBe(3);
+  });
+
   it('preserves present v1.1 fields on load', () => {
     const state = sampleState();
     state.charts[0].pillars[0].actions[0] = {

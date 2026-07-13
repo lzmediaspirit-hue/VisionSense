@@ -6,9 +6,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isHabitCheckedToday, localDayKey, streakAcrossCharts } from '../model/completions';
-import { MAX_MITS } from '../model/journal';
+import { isWeeklySatisfied, MAX_MITS, weekCompletions } from '../model/journal';
 import { setActionStatus, toggleHabitToday } from '../model/operations';
-import { findActionById, isActionDone, isActionFilled } from '../model/progress';
+import { findActionById, isActionDone, isActionFilled, isWeeklyHabit } from '../model/progress';
 import type { Action, Chart, DayPlan } from '../model/types';
 import { useStore } from '../state/store';
 import { RewardToast, type RewardToastData } from './RewardToast';
@@ -113,25 +113,29 @@ export function TodayView({ onClose }: TodayViewProps) {
     });
   }, [plan.mits, charts]);
 
-  // Daily habits: every non-established, filled habit across all charts.
-  const habitRows = useMemo(() => {
-    const rows: { chart: Chart; pillarIndex: number; actionIndex: number; pillarName: string; action: Action }[] = [];
+  // Habits: every non-established, filled habit across all charts, split into
+  // daily (weeklyTarget === 0) and weekly-cadence (weeklyTarget >= 1) rows
+  // (v1.5, SPEC 12).
+  const { dailyHabitRows, weeklyHabitRows } = useMemo(() => {
+    const daily: { chart: Chart; pillarIndex: number; actionIndex: number; pillarName: string; action: Action }[] = [];
+    const weekly: { chart: Chart; pillarIndex: number; actionIndex: number; pillarName: string; action: Action }[] = [];
     for (const chart of charts) {
       chart.pillars.forEach((pillar, pillarIndex) => {
         pillar.actions.forEach((action, actionIndex) => {
           if (action.habit && !action.established && isActionFilled(action)) {
-            rows.push({
+            const row = {
               chart,
               pillarIndex,
               actionIndex,
               pillarName: pillar.name.trim() || 'Unnamed pillar',
               action,
-            });
+            };
+            (isWeeklyHabit(action) ? weekly : daily).push(row);
           }
         });
       });
     }
-    return rows;
+    return { dailyHabitRows: daily, weeklyHabitRows: weekly };
   }, [charts]);
 
   // Auto summary: what actually got done today across all charts.
@@ -238,14 +242,14 @@ export function TodayView({ onClose }: TodayViewProps) {
         <h2 className="today__section-title" id="today-habits-h">
           Daily habits
         </h2>
-        {habitRows.length === 0 ? (
+        {dailyHabitRows.length === 0 ? (
           <p className="today__empty">
             No daily habits yet. Turn any action into a habit from its detail dialog to check it off
             here each day.
           </p>
         ) : (
           <ul className="mit-list">
-            {habitRows.map(({ chart, pillarIndex, actionIndex, pillarName, action }) => {
+            {dailyHabitRows.map(({ chart, pillarIndex, actionIndex, pillarName, action }) => {
               const checked = isHabitCheckedToday(action, today);
               return (
                 <li key={`${chart.id}:${action.id}`} className={`mit ${checked ? 'is-done' : ''}`.trim()}>
@@ -276,6 +280,53 @@ export function TodayView({ onClose }: TodayViewProps) {
           </ul>
         )}
       </section>
+
+      {/* Weekly habits (v1.5, SPEC 12): shown only when at least one exists — no
+          empty state, since daily habits already cover the "get started" nudge. */}
+      {weeklyHabitRows.length > 0 && (
+        <section className="today__section" aria-labelledby="today-weekly-habits-h">
+          <h2 className="today__section-title" id="today-weekly-habits-h">
+            Weekly habits
+          </h2>
+          <ul className="mit-list">
+            {weeklyHabitRows.map(({ chart, pillarIndex, actionIndex, pillarName, action }) => {
+              const checked = isHabitCheckedToday(action, today);
+              const satisfied = isWeeklySatisfied(action, today);
+              return (
+                <li
+                  key={`${chart.id}:${action.id}`}
+                  className={`mit ${satisfied ? 'is-done' : ''}`.trim()}
+                >
+                  <button
+                    type="button"
+                    className="mit__check"
+                    aria-pressed={checked}
+                    aria-label={`${checked ? 'Undo today for' : 'Did it today:'} “${action.text.trim() || 'habit'}”`}
+                    onClick={() => toggleComplete(chart.id, pillarIndex, actionIndex, action)}
+                  >
+                    <span aria-hidden="true">{checked ? '✓' : ''}</span>
+                  </button>
+                  <div className="mit__body">
+                    <span className="mit__text">{action.text.trim() || 'Untitled habit'}</span>
+                    <span className="mit__context">
+                      {chartTitleOf(chart)} · {pillarName}
+                    </span>
+                    {action.cue.trim() !== '' && (
+                      <span className="mit__cue">
+                        <span aria-hidden="true">⏱ </span>
+                        {action.cue.trim()}
+                      </span>
+                    )}
+                  </div>
+                  <span className="mit__week">
+                    {weekCompletions(action, today)} / {action.weeklyTarget} this week
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* Evening reflection */}
       <section className="today__section" aria-labelledby="today-reflect-h">

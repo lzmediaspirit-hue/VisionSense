@@ -68,6 +68,15 @@ function validateAction(v: unknown): Action | null {
     : [];
   // v1.4 if-then cue — same additive rule (SPEC 11.1): default when absent.
   const cue = typeof v.cue === 'string' ? v.cue : '';
+  // v1.5 weekly cadence — same additive rule (SPEC 12): default to 0 (daily)
+  // when absent, wrong type, non-integer, or out of the 0..7 range.
+  const weeklyTarget =
+    typeof v.weeklyTarget === 'number' &&
+    Number.isInteger(v.weeklyTarget) &&
+    v.weeklyTarget >= 0 &&
+    v.weeklyTarget <= 7
+      ? v.weeklyTarget
+      : 0;
   return {
     id,
     text,
@@ -79,6 +88,7 @@ function validateAction(v: unknown): Action | null {
     established,
     completions,
     cue,
+    weeklyTarget,
   };
 }
 

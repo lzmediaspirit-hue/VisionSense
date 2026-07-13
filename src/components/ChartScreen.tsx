@@ -6,6 +6,7 @@ import type { GridCell } from '../model/grid';
 import {
   nextStatus,
   renamePillar,
+  setActionCadence,
   setActionDetails,
   setActionEstablished,
   setActionHabit,
@@ -105,6 +106,14 @@ export function ChartScreen({
   const onSetHabit = useCallback(
     (pillarIndex: number, actionIndex: number, habit: boolean) => {
       mutateActive((c) => setActionHabit(c, pillarIndex, actionIndex, habit));
+    },
+    [mutateActive],
+  );
+
+  // Set a habit's weekly cadence from the detail dialog (v1.5, SPEC 12).
+  const onSetCadence = useCallback(
+    (pillarIndex: number, actionIndex: number, weeklyTarget: number) => {
+      mutateActive((c) => setActionCadence(c, pillarIndex, actionIndex, weeklyTarget));
     },
     [mutateActive],
   );
@@ -244,6 +253,9 @@ export function ChartScreen({
         }}
         onSetHabit={(habit) => {
           if (detail) onSetHabit(detail.pillarIndex, detail.actionIndex, habit);
+        }}
+        onSetCadence={(weeklyTarget) => {
+          if (detail) onSetCadence(detail.pillarIndex, detail.actionIndex, weeklyTarget);
         }}
         onSetEstablished={(established) => {
           if (detail) onSetEstablished(detail.pillarIndex, detail.actionIndex, established);

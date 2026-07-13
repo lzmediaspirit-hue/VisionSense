@@ -4,19 +4,22 @@
 
 import { describe, expect, it } from 'vitest';
 import { localDayKey } from './completions';
+import { createAction } from './factory';
 import {
   DAY_MAX_AGE_DAYS,
   isoWeekKey,
   isoWeekLabel,
   isReviewDue,
+  isWeeklySatisfied,
   MAX_MITS,
   pruneDays,
   validateDayPlan,
   validateDays,
   validateReview,
   validateReviews,
+  weekCompletions,
 } from './journal';
-import type { DayPlan, Review } from './types';
+import type { Action, DayPlan, Review } from './types';
 
 describe('validateDayPlan / validateDays', () => {
   it('defaults every field on a bare object', () => {
@@ -168,6 +171,70 @@ describe('isoWeekKey / isoWeekLabel', () => {
 
   it('isoWeekLabel falls back to the raw key when malformed', () => {
     expect(isoWeekLabel('not-a-week-key')).toBe('not-a-week-key');
+  });
+});
+
+describe('weekCompletions / isWeeklySatisfied (v1.5)', () => {
+  const NOW = new Date(2026, 6, 13); // Monday, ISO week 2026-W29
+
+  function habitAction(completions: string[], weeklyTarget = 3): Action {
+    return { ...createAction(), habit: true, weeklyTarget, completions };
+  }
+
+  it('counts distinct local days in the current ISO week', () => {
+    const action = habitAction([
+      new Date(2026, 6, 13, 8, 0).toISOString(), // Mon (this week)
+      new Date(2026, 6, 13, 20, 0).toISOString(), // Mon again — same local day
+      new Date(2026, 6, 15, 9, 0).toISOString(), // Wed (this week)
+    ]);
+    expect(weekCompletions(action, NOW)).toBe(2);
+  });
+
+  it('ignores completions from other weeks', () => {
+    const action = habitAction([
+      new Date(2026, 6, 13, 8, 0).toISOString(), // Mon, this week
+      new Date(2026, 6, 6, 8, 0).toISOString(), // Mon, last week (2026-W28)
+      new Date(2026, 6, 20, 8, 0).toISOString(), // Mon, next week (2026-W30)
+    ]);
+    expect(weekCompletions(action, NOW)).toBe(1);
+  });
+
+  it('isWeeklySatisfied is false below target and true at/above target', () => {
+    const belowTarget = habitAction([new Date(2026, 6, 13, 8, 0).toISOString()], 3);
+    expect(isWeeklySatisfied(belowTarget, NOW)).toBe(false);
+
+    const atTarget = habitAction(
+      [
+        new Date(2026, 6, 13, 8, 0).toISOString(),
+        new Date(2026, 6, 14, 8, 0).toISOString(),
+        new Date(2026, 6, 15, 8, 0).toISOString(),
+      ],
+      3,
+    );
+    expect(isWeeklySatisfied(atTarget, NOW)).toBe(true);
+
+    const aboveTarget = habitAction(
+      [
+        new Date(2026, 6, 13, 8, 0).toISOString(),
+        new Date(2026, 6, 14, 8, 0).toISOString(),
+        new Date(2026, 6, 15, 8, 0).toISOString(),
+        new Date(2026, 6, 16, 8, 0).toISOString(),
+      ],
+      3,
+    );
+    expect(isWeeklySatisfied(aboveTarget, NOW)).toBe(true);
+  });
+
+  it('is always false when weeklyTarget is 0, no matter the completions', () => {
+    const action = habitAction(
+      [
+        new Date(2026, 6, 13, 8, 0).toISOString(),
+        new Date(2026, 6, 14, 8, 0).toISOString(),
+        new Date(2026, 6, 15, 8, 0).toISOString(),
+      ],
+      0,
+    );
+    expect(isWeeklySatisfied(action, NOW)).toBe(false);
   });
 });
 

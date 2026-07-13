@@ -231,6 +231,35 @@ export function toggleHabitToday(
   return replaceAction(chart, pillarIndex, actionIndex, { ...action, completions }, now);
 }
 
+/**
+ * Set a habit's weekly cadence (v1.5, SPEC 12): 0 keeps it daily, N (1..7)
+ * targets N check-off days per ISO week. Clamped to an integer in [0, 7]
+ * (non-finite input, e.g. NaN, becomes 0). Turning the habit off (via
+ * `setActionHabit`) intentionally KEEPS `weeklyTarget` as a preference — it is
+ * harmless while `habit` is false, since cadence is only ever read for habits.
+ */
+export function setActionCadence(
+  chart: Chart,
+  pillarIndex: number,
+  actionIndex: number,
+  weeklyTarget: number,
+  now: Clock = defaultNow,
+): Chart {
+  if (!inRange(pillarIndex) || !inRange(actionIndex)) return chart;
+  const clamped = Number.isFinite(weeklyTarget)
+    ? Math.max(0, Math.min(7, Math.round(weeklyTarget)))
+    : 0;
+  const action = chart.pillars[pillarIndex].actions[actionIndex];
+  if (action.weeklyTarget === clamped) return chart;
+  return replaceAction(
+    chart,
+    pillarIndex,
+    actionIndex,
+    { ...action, weeklyTarget: clamped },
+    now,
+  );
+}
+
 /** Swap (reorder) two pillars by index. */
 export function swapPillars(
   chart: Chart,

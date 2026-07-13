@@ -415,6 +415,73 @@ All UI themed via existing custom properties, mobile-first at 375px with no
 horizontal scroll, keyboard accessible, stable aria-labels for QA (e.g.
 "Today view", "Pick today's top 3", "Weekly review").
 
+## 12. v1.5 additions (locked): weekly-cadence habits
+
+Not every habit belongs on a daily cadence ("gym 3× a week" is honest; a daily
+nag for it is not). This adds a per-habit weekly target alongside the
+existing daily habit tracking, with no changes to how completions, streaks,
+or the graph/calendar work.
+
+### 12.1 Data model
+`Action` gains `weeklyTarget: number` (default `0`). It is only meaningful
+when `habit === true`:
+- `weeklyTarget === 0` → **daily** habit, exactly today's behaviour (unchanged).
+- `weeklyTarget >= 1` → **weekly** habit, aiming for that many check-off days
+  per ISO week (1..7; the detail-dialog control offers 1..6, since 7 is just
+  "every day").
+- `isWeeklyHabit(action)` (`src/model/progress.ts`) is the derived predicate:
+  `action.habit && action.weeklyTarget >= 1`.
+
+Check-offs are unchanged: a weekly habit still uses `toggleHabitToday`, one
+completion per local day, exactly like a daily habit. Because
+`collectCompletions` already walks every action's `completions`, the Progress
+graph (daily/monthly/yearly buckets), the Calendar tab, and the all-charts
+streak already include weekly-habit check-offs with **no code changes**.
+Chart-progress "done" ("X / 64") is also unchanged: a habit still counts as
+done only when `established` — meeting a week's target is a per-week signal,
+not a permanent achievement, so `isActionDone` is untouched.
+
+### 12.2 Weekly progress helpers
+`src/model/journal.ts` gains two pure helpers built on the existing
+`isoWeekKey`:
+- `weekCompletions(action, now)` — the count of DISTINCT local days within
+  `now`'s ISO week that have a completion.
+- `isWeeklySatisfied(action, now)` — `weeklyTarget >= 1 &&
+  weekCompletions(action, now) >= weeklyTarget`; always `false` for a daily
+  habit (`weeklyTarget === 0`).
+
+### 12.3 Detail dialog: cadence control
+The Action detail dialog's habit switch is reworded ("Track as a habit" /
+"...every day, or a few set days a week", since it's no longer daily-only).
+When the habit switch is on, a **"How often?"** `<select>` appears above the
+"Mark as established" toggle: "Every day" (0) or "1× a week".."6× a week"
+(1..6), writing through `setActionCadence` (`src/model/operations.ts`) on
+change. Its hint shows this week's progress once a weekly cadence is chosen
+("Aim for N days each week. This week: X / N."). The established toggle's
+copy drops "daily" ("no more check-ins" / "stops asking for check-ins") since
+check-ins can now be a few days a week.
+
+### 12.4 Today view: a separate weekly-habits section
+The "Daily habits" section on `TodayView` now only lists `weeklyTarget === 0`
+habits (`isWeeklyHabit` filters the rest out), exactly as before. A new
+**"Weekly habits"** section renders immediately after it, **only when at
+least one weekly habit exists** (no empty state — the daily section already
+carries the "get started" nudge). Each row is a daily-habit row plus a
+progress pill (`{weekCompletions} / {weeklyTarget} this week`); the row gets
+`is-done` styling when `isWeeklySatisfied` — i.e. the week's target is met —
+independent of whether *today* was checked off. The check button itself
+still toggles today's completion via the same `toggleHabitToday` path, with
+the same daily aria-label pattern ("Did it today" / "Undo today for").
+
+### 12.5 Compatibility
+Additive-only: `schemaVersion` stays 1. `validateAction` (`src/model/
+storage.ts`) defaults `weeklyTarget` to `0` for any old/foreign value —
+absent, wrong type, non-integer, negative, or > 7 — so pre-v1.5 localStorage
+blobs, JSON chart exports, and synced Drive files (which route through the
+same `validateChart`) all load as daily habits, unchanged. No sync-payload
+shape changes: `weeklyTarget` rides inside `Action` through the existing
+chart merge/push/pull path.
+
 ## 9. Repository layout
 
 App lives at the repo root: `index.html`, `src/`, `package.json`, `docs/SPEC.md`

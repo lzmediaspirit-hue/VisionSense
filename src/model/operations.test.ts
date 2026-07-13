@@ -4,6 +4,7 @@ import {
   cycleActionStatus,
   nextStatus,
   renamePillar,
+  setActionCadence,
   setActionDetails,
   setActionEstablished,
   setActionHabit,
@@ -192,6 +193,48 @@ describe('operations', () => {
     chart = { ...chart, pillars };
     const toggled = toggleHabitToday(chart, 0, 0, () => new Date(2024, 5, 1, 12, 0).toISOString());
     expect(toggled.pillars[0].actions[0].completions).toHaveLength(0);
+  });
+
+  // --- Weekly cadence (v1.5) -------------------------------------------------
+
+  it('setActionCadence sets the weekly target', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Gym', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    chart = setActionCadence(chart, 0, 0, 3, CLOCK);
+    expect(chart.pillars[0].actions[0].weeklyTarget).toBe(3);
+  });
+
+  it('setActionCadence clamps out-of-range values into [0, 7]', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Gym', CLOCK);
+    chart = setActionCadence(chart, 0, 0, -5, CLOCK);
+    expect(chart.pillars[0].actions[0].weeklyTarget).toBe(0);
+    chart = setActionCadence(chart, 0, 0, 99, CLOCK);
+    expect(chart.pillars[0].actions[0].weeklyTarget).toBe(7);
+    chart = setActionCadence(chart, 0, 0, NaN, CLOCK);
+    expect(chart.pillars[0].actions[0].weeklyTarget).toBe(0);
+  });
+
+  it('setActionCadence rounds a float', () => {
+    const chart = setActionCadence(createChart(), 0, 0, 3.6, CLOCK);
+    expect(chart.pillars[0].actions[0].weeklyTarget).toBe(4);
+  });
+
+  it('setActionCadence is a no-op (same reference) when unchanged', () => {
+    const chart = createChart();
+    expect(setActionCadence(chart, 0, 0, 0, CLOCK)).toBe(chart);
+    const withTarget = setActionCadence(chart, 0, 0, 3, CLOCK);
+    expect(setActionCadence(withTarget, 0, 0, 3, CLOCK)).toBe(withTarget);
+  });
+
+  it('setActionCadence preserves completions/established/habit', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Gym', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    chart = toggleHabitToday(chart, 0, 0, () => '2024-06-01T08:00:00.000Z');
+    chart = setActionEstablished(chart, 0, 0, true, CLOCK);
+    const next = setActionCadence(chart, 0, 0, 3, CLOCK);
+    expect(next.pillars[0].actions[0].habit).toBe(true);
+    expect(next.pillars[0].actions[0].established).toBe(true);
+    expect(next.pillars[0].actions[0].completions).toEqual(['2024-06-01T08:00:00.000Z']);
   });
 
   it('ignores out-of-range indices (Rule of 8 boundary)', () => {
