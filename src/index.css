@@ -1860,22 +1860,41 @@ button {
     display: block;
   }
 
+  /* One page, always: the grid is a square sized by the page HEIGHT (the
+     limiting dimension in landscape — ~190mm printable on A4, ~196mm on
+     Letter), centered horizontally. On screen the square comes from the page
+     width, which would overflow a landscape sheet vertically. */
   .grid {
     max-width: none;
-    width: 100%;
-    height: 100vh;
+    width: auto;
+    height: 178mm;
+    aspect-ratio: 1;
+    margin: 0 auto;
     box-shadow: none;
     page-break-inside: avoid;
+    break-inside: avoid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
   }
   .block {
     box-shadow: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
   }
+  /* Cells must be allowed to shrink below their text's natural size, or the
+     rows' min-content blows the grid past the page and onto a second sheet. */
   .cell {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    aspect-ratio: auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
   .cell__text {
-    -webkit-line-clamp: 6;
-    line-clamp: 6;
+    font-size: 7pt;
+    line-height: 1.3;
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
   }
 }
