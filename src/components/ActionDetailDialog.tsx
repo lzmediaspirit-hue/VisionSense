@@ -7,7 +7,7 @@ interface ActionDetailDialogProps {
   pillarIndex: number | null;
   actionIndex: number | null;
   onCommitText: (text: string) => void;
-  onCommitDetails: (details: { description?: string; reward?: string }) => void;
+  onCommitDetails: (details: { description?: string; reward?: string; cue?: string }) => void;
   onSetStatus: (status: StoredStatus) => void;
   /** Turn daily habit tracking on/off (v1.2). */
   onSetHabit: (habit: boolean) => void;
@@ -47,8 +47,9 @@ export function ActionDetailDialog({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [reward, setReward] = useState('');
+  const [cue, setCue] = useState('');
   // Track what we opened with, so blur/close only commits genuine changes.
-  const base = useRef({ title: '', description: '', reward: '' });
+  const base = useRef({ title: '', description: '', reward: '', cue: '' });
 
   // Sync drafts from the action whenever the dialog (re)opens on a new action.
   useEffect(() => {
@@ -56,10 +57,12 @@ export function ActionDetailDialog({
     setTitle(action.text);
     setDescription(action.description);
     setReward(action.reward);
+    setCue(action.cue);
     base.current = {
       title: action.text,
       description: action.description,
       reward: action.reward,
+      cue: action.cue,
     };
   }, [action?.id, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -68,13 +71,19 @@ export function ActionDetailDialog({
       onCommitText(title);
       base.current.title = title;
     }
-    const details: { description?: string; reward?: string } = {};
+    const details: { description?: string; reward?: string; cue?: string } = {};
     if (description !== base.current.description) details.description = description;
     if (reward !== base.current.reward) details.reward = reward;
-    if (details.description !== undefined || details.reward !== undefined) {
+    if (cue !== base.current.cue) details.cue = cue;
+    if (
+      details.description !== undefined ||
+      details.reward !== undefined ||
+      details.cue !== undefined
+    ) {
       onCommitDetails(details);
       base.current.description = description;
       base.current.reward = reward;
+      base.current.cue = cue;
     }
   };
 
@@ -151,6 +160,21 @@ export function ActionDetailDialog({
             rows={4}
             placeholder="The detail behind this action — the how, the why, the specifics."
           />
+        </label>
+
+        <label className="field">
+          <span className="field__label">When &amp; where?</span>
+          <input
+            type="text"
+            className="field__input"
+            value={cue}
+            onChange={(e) => setCue(e.target.value)}
+            onBlur={flush}
+            placeholder="After breakfast, at the park"
+          />
+          <span className="field__hint">
+            An if-then plan: pre-decide the moment you&apos;ll act. Shown in Today.
+          </span>
         </label>
 
         <label className="field">

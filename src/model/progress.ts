@@ -61,3 +61,27 @@ export function completionRatio(progress: Progress): number {
   if (progress.filled === 0) return 0;
   return progress.done / progress.filled;
 }
+
+export interface LocatedAction {
+  pillarIndex: number;
+  actionIndex: number;
+  pillar: Pillar;
+  action: Action;
+}
+
+/**
+ * Find an action by id within a chart, returning its indices and the live
+ * pillar/action (or null if absent). Used by the Today view, which references
+ * actions by id across charts rather than by grid position.
+ */
+export function findActionById(chart: Chart, actionId: string): LocatedAction | null {
+  for (let p = 0; p < chart.pillars.length; p++) {
+    const pillar = chart.pillars[p];
+    for (let a = 0; a < pillar.actions.length; a++) {
+      if (pillar.actions[a].id === actionId) {
+        return { pillarIndex: p, actionIndex: a, pillar, action: pillar.actions[a] };
+      }
+    }
+  }
+  return null;
+}

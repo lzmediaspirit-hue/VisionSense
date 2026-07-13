@@ -81,21 +81,30 @@ export function setActionText(
   return replaceAction(chart, pillarIndex, actionIndex, { ...action, text }, now);
 }
 
-/** Set an action's free-text details (description / reward). Only provided
- * fields change; passing neither is a no-op. Does not touch status. */
+/** Set an action's free-text details (description / reward / if-then cue). Only
+ * provided fields change; passing none is a no-op. Does not touch status. */
 export function setActionDetails(
   chart: Chart,
   pillarIndex: number,
   actionIndex: number,
-  details: { description?: string; reward?: string },
+  details: { description?: string; reward?: string; cue?: string },
   now: Clock = defaultNow,
 ): Chart {
   if (!inRange(pillarIndex) || !inRange(actionIndex)) return chart;
   const action = chart.pillars[pillarIndex].actions[actionIndex];
   const description = details.description ?? action.description;
   const reward = details.reward ?? action.reward;
-  if (description === action.description && reward === action.reward) return chart;
-  return replaceAction(chart, pillarIndex, actionIndex, { ...action, description, reward }, now);
+  const cue = details.cue ?? action.cue;
+  if (description === action.description && reward === action.reward && cue === action.cue) {
+    return chart;
+  }
+  return replaceAction(
+    chart,
+    pillarIndex,
+    actionIndex,
+    { ...action, description, reward, cue },
+    now,
+  );
 }
 
 /**

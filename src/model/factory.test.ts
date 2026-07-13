@@ -63,6 +63,8 @@ describe('factory / Rule of 8', () => {
       schemaVersion: 1,
       charts: [],
       activeChartId: null,
+      days: {},
+      reviews: {},
     });
   });
 

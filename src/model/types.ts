@@ -24,6 +24,7 @@ export interface Action {
   habit: boolean; // when true this is a daily behaviour, not a one-shot task (v1.2)
   established: boolean; // a graduated habit: counts as done, no more daily check-ins (v1.2)
   completions: string[]; // ISO timestamps of daily check-offs, at most one per local day (v1.2)
+  cue: string; // '' = none; the "when & where" of an if-then plan (v1.4, SPEC 11.1)
 }
 
 export interface Pillar {
@@ -43,10 +44,38 @@ export interface Chart {
   updatedAt: string; // ISO
 }
 
+/**
+ * A single day's plan (v1.4, SPEC 11.2). Keyed in AppState.days by the LOCAL
+ * day (YYYY-MM-DD). `mits` are "most important tasks" — references to actions in
+ * any chart, structurally capped at 3. MIT completion is always DERIVED from the
+ * referenced action, never stored here.
+ */
+export interface DayPlan {
+  mits: Array<{ chartId: string; actionId: string }>; // max 3
+  note: string; // the evening reflection ("What did I learn today?")
+  updatedAt: string; // ISO — used for per-key LWW sync merge
+}
+
+/**
+ * A weekly review (v1.4, SPEC 11.3). Keyed in AppState.reviews by ISO week
+ * (YYYY-Www). All prompts are optional short free-text.
+ */
+export interface Review {
+  wins: string; // "What went well?"
+  obstacle: string; // "What got in the way?"
+  change: string; // "What will you do differently?"
+  focus: string; // "#1 focus next week"
+  updatedAt: string; // ISO — used for per-key LWW sync merge
+}
+
 export interface AppState {
   schemaVersion: 1;
   charts: Chart[];
   activeChartId: string | null;
+  /** Per-day plans, keyed by local YYYY-MM-DD (v1.4). Defaulted to {} on load. */
+  days: Record<string, DayPlan>;
+  /** Weekly reviews, keyed by ISO week YYYY-Www (v1.4). Defaulted to {} on load. */
+  reviews: Record<string, Review>;
 }
 
 /** The fixed number of pillars in a chart, and actions per pillar. */

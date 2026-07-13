@@ -5,6 +5,7 @@
 
 import { useCallback, useRef, useState, type ChangeEvent } from 'react';
 import { parseChartImport } from '../model/exportImport';
+import { isReviewDue } from '../model/journal';
 import { chartProgress } from '../model/progress';
 import { useStore } from '../state/store';
 import type { Template } from '../templates/templates';
@@ -18,10 +19,18 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function Dashboard() {
+interface DashboardProps {
+  /** Open the cross-chart Today view (v1.4, SPEC 11.2). */
+  onOpenToday: () => void;
+  /** Open the weekly review screen (v1.4, SPEC 11.3). */
+  onOpenReview: () => void;
+}
+
+export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
   const { state, createBlankChart, importChart, openChart, duplicateChart, deleteChart } =
     useStore();
   const charts = state.charts;
+  const reviewDue = isReviewDue(state.reviews);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -94,6 +103,21 @@ export function Dashboard() {
           </button>
         </div>
       </header>
+
+      <div className="dashboard__cta">
+        <button type="button" className="btn btn--primary dashboard__cta-today" onClick={onOpenToday}>
+          <span aria-hidden="true">☀</span> Today
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost dashboard__cta-review"
+          onClick={onOpenReview}
+          aria-label={reviewDue ? 'Review (due)' : 'Review'}
+        >
+          Review
+          {reviewDue && <span className="due-badge" aria-hidden="true" />}
+        </button>
+      </div>
 
       <SyncWidget />
 

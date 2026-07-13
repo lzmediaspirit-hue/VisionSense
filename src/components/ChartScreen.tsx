@@ -32,7 +32,14 @@ interface DetailTarget {
   actionIndex: number;
 }
 
-export function ChartScreen({ chart }: { chart: Chart }) {
+export function ChartScreen({
+  chart,
+  onOpenToday,
+}: {
+  chart: Chart;
+  /** Open the cross-chart Today view (v1.4, SPEC 11.2), reachable from the header. */
+  onOpenToday: () => void;
+}) {
   const { mutateActive, closeChart } = useStore();
   const compact = useIsCompact();
   const printing = usePrintMode();
@@ -168,6 +175,9 @@ export function ChartScreen({ chart }: { chart: Chart }) {
         <div className="chart-header__tools">
           <ThemeSwitcher value={chart.themeId} onChange={onThemeChange} />
           <div className="chart-header__actions">
+            <button type="button" className="btn btn--primary" onClick={onOpenToday}>
+              Today
+            </button>
             <button type="button" className="btn btn--ghost" onClick={() => setProgressOpen(true)}>
               Progress
             </button>

@@ -4,7 +4,7 @@
 // so this whole layer is trivially mockable in unit tests and browser QA by
 // stubbing `global.fetch`.
 
-import type { Chart } from '../model/types';
+import type { Chart, DayPlan, Review } from '../model/types';
 
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
@@ -18,6 +18,15 @@ export interface DrivePayload {
   charts: Chart[];
   deletedChartIds: Record<string, string>;
   savedAt: string; // ISO
+  /**
+   * The v1.4 journal (day plans + weekly reviews). Optional so pre-v1.4 files
+   * and clients keep working; absent => both records default to {} on read
+   * (SPEC 11.4).
+   */
+  journal?: {
+    days: Record<string, DayPlan>;
+    reviews: Record<string, Review>;
+  };
 }
 
 /** An HTTP-level Drive failure. `status` lets callers detect auth (401) vs. other. */
