@@ -1409,8 +1409,8 @@ select.field__input {
   background: color-mix(in srgb, var(--status-doing) 12%, var(--surface));
 }
 .cell--action.status-done {
-  background: var(--done-bg);
-  color: var(--done-text);
+  background: color-mix(in srgb, var(--cell-accent, var(--status-done)) 18%, var(--surface));
+  color: var(--text);
 }
 
 .cell.is-highlighted:not(.cell--goal) {

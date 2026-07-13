@@ -980,3 +980,59 @@ horizontal scroll; verified with Playwright against the example chart's
 — including its one habit, via establish — done lights the cell and fires
 the toast exactly once, on the 8th) and with `reducedMotion: 'reduce'`
 emulation (toast still appears, instantly).
+
+## 18. v2.0 (locked): the living mandala
+
+Completing an action no longer washes its cell in a generic green — it
+washes in *that action's own pillar's hue*, so a chart in progress reads
+like a stained-glass window lighting up around the dark goal cell: the
+grid itself becomes the progress visualization. This applies uniformly to
+every `status-done` visual — plain tasks marked done, checked-today
+habits, and established habits all resolve to the same treatment, since
+`Cell.tsx` already pushes one shared `status-done` class for all three
+(`doneVisual` in both the screen component and the PNG exporter).
+
+`.cell--action.status-done` (`src/index.css`) becomes `background:
+color-mix(in srgb, var(--cell-accent, var(--status-done)) 18%,
+var(--surface))` with `color: var(--text)`. 18%, not the 14% used by
+`.is-highlighted`'s hover wash, so a completed cell reads slightly
+stronger than a hover — the chart's resting state should look more "lit"
+than a transient interaction. The `--cell-accent` fallback to
+`--status-done` keeps any accent-less context (a done cell somehow
+rendered without a pillar color) from going transparent. Text returns to
+the ordinary `--text` color instead of the old `--done-text` green — a
+green text color on a colored wash would clash with the pillar hue, and
+`--text` is what every other cell state already uses.
+
+`renderChartPng.ts`'s canvas export mirrors this exactly: in the
+background branch, `doneVisual` cells use `pillarColor ? mix(pillarColor,
+colors.surface, 18) : colors.doneBg` (the `doneBg` fallback covers the
+theoretical no-pillar case, same as the CSS fallback), and the text-color
+branch no longer special-cases `doneVisual` — done cells fall through to
+the same `colors.text` every other filled, non-goal cell already uses,
+matching the screen's `color: var(--text)` exactly.
+
+The status glyph is untouched: the small green check (or filled ring, for
+a checked-today habit) in the cell's top-right corner remains the done
+*semantic* — color communicates progress at a glance, the glyph is what a
+screen reader or a colorblind user actually reads as "done." `.status-doing`,
+the detail dot, and all other status/glyph colors are unchanged.
+
+**Contrast, verified empirically.** A node script (relative-luminance /
+WCAG contrast-ratio formula, no library) computed `--text` against an 18%
+pillar-over-surface wash for all 8 pillar colors across all 4 themes (32
+combinations) — every theme composites a dark `--text` over a light
+`--surface`, so an 18% saturated tint barely moves the background's
+luminance. The minimum ratio across all 32 was **10.38:1**, from
+`campus`'s `--pillar-color-0` (`#b3122a`, a deep crimson) — the theme's
+navy-adjacent dark text against the reddest wash. That comfortably clears
+the ≥4.5:1 floor with room to spare, so 18% held for all four themes; no
+per-theme special-casing was needed and the 14% fallback specified as a
+tripwire was not used.
+
+This completes a language the app was already speaking in miniature: the
+dashboard's chart-card thumbnails fill their pillar-progress ring at 55%
+of the pillar's hue, and a pillar-complete cell (§17.3) tints at 26%. The
+living-mandala treatment is the same idea applied to the individual done
+cell, at a more restrained 18% so the green status glyph — not the
+background wash — stays the dominant "this is done" signal.

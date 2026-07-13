@@ -298,7 +298,7 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
       } else if (cell.kind === 'pillar' && pillarColor) {
         bg = mix(pillarColor, colors.surface, 10);
       } else if (cell.kind === 'action' && isFilled) {
-        if (doneVisual) bg = colors.doneBg;
+        if (doneVisual) bg = pillarColor ? mix(pillarColor, colors.surface, 18) : colors.doneBg;
         else if (doingVisual) bg = mix(colors.statusDoing, colors.surface, 14);
       }
       ctx.fillStyle = bg;
@@ -326,7 +326,6 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
       let textColor: string;
       if (isFilled) {
         if (isGoal) textColor = colors.goalText;
-        else if (doneVisual) textColor = colors.doneText;
         else textColor = colors.text;
       } else {
         textColor = isGoal ? colors.goalMuted : colors.textFaint;
