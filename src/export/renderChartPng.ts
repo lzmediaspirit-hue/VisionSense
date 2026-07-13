@@ -333,16 +333,24 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
       }
       ctx.fillStyle = textColor;
 
-      const label = isFilled ? cell.text.trim() : PLACEHOLDER[cell.kind];
-      const maxTextWidth = CELL - 16;
-      const lineHeight = fontSize + 4;
-      const maxLines = Math.max(1, Math.floor((CELL - 16) / lineHeight));
-      const lines = wrapText(ctx, label, maxTextWidth, Math.min(4, maxLines));
-      const blockHeight = lines.length * lineHeight;
-      let ty = y + CELL / 2 - blockHeight / 2 + lineHeight * 0.75;
-      for (const line of lines) {
-        ctx.fillText(line, x + CELL / 2, ty);
-        ty += lineHeight;
+      // Empty ACTION cells draw no placeholder text at all (mirrors the
+      // on-screen "reveal on hover only" treatment — a static PNG has no
+      // hover state, so the quiet default is to omit it entirely). Empty
+      // goal/pillar cells still draw their placeholder — that structure is
+      // what teaches the method.
+      const skipEmptyActionLabel = !isFilled && cell.kind === 'action';
+      if (!skipEmptyActionLabel) {
+        const label = isFilled ? cell.text.trim() : PLACEHOLDER[cell.kind];
+        const maxTextWidth = CELL - 16;
+        const lineHeight = fontSize + 4;
+        const maxLines = Math.max(1, Math.floor((CELL - 16) / lineHeight));
+        const lines = wrapText(ctx, label, maxTextWidth, Math.min(4, maxLines));
+        const blockHeight = lines.length * lineHeight;
+        let ty = y + CELL / 2 - blockHeight / 2 + lineHeight * 0.75;
+        for (const line of lines) {
+          ctx.fillText(line, x + CELL / 2, ty);
+          ty += lineHeight;
+        }
       }
       ctx.restore();
       ctx.textAlign = 'left';

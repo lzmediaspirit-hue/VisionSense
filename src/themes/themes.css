@@ -11,7 +11,8 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
     Arial, sans-serif;
   --fs-cell: 0.78rem;
-  --fs-goal: 0.98rem;
+  --fs-display: clamp(1.7rem, 4vw, 2.4rem);
+  --fs-goal: 1.15rem;
   --fs-pillar: 0.86rem;
   --fs-meta: 0.72rem;
 
@@ -40,7 +41,7 @@
 
   --text: #1f2430;
   --text-muted: #5b6270;
-  --text-faint: #aab0bd; /* placeholder text */
+  --text-faint: #8a90a0; /* placeholder text */
 
   --border: #e6e8ee;
   --border-strong: #cdd2dd;
@@ -86,7 +87,7 @@
 
   --text: #16241c;
   --text-muted: #4c6357;
-  --text-faint: #93a89b;
+  --text-faint: #7a9184;
 
   --border: #1f4a2c;
   --border-strong: #0f2818;
@@ -128,7 +129,7 @@
 
   --text: #241a12;
   --text-muted: #6b5a45;
-  --text-faint: #a8977e;
+  --text-faint: #8f7d63;
 
   --border: #4a1e28;
   --border-strong: #170f12;
@@ -169,7 +170,7 @@
 
   --text: #1c2a44;
   --text-muted: #5b6a85;
-  --text-faint: #9aa6bb;
+  --text-faint: #828fa6;
 
   --border: #b9c4d9;
   --border-strong: #24406b;
