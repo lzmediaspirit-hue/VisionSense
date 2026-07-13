@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { weekCompletions } from '../model/journal';
 import type { Action, StoredStatus } from '../model/types';
 
 interface ActionDetailDialogProps {
@@ -9,8 +10,10 @@ interface ActionDetailDialogProps {
   onCommitText: (text: string) => void;
   onCommitDetails: (details: { description?: string; reward?: string; cue?: string }) => void;
   onSetStatus: (status: StoredStatus) => void;
-  /** Turn daily habit tracking on/off (v1.2). */
+  /** Turn habit tracking on/off (v1.2). */
   onSetHabit: (habit: boolean) => void;
+  /** Set a habit's weekly cadence: 0 = daily, N = target days/week (v1.5). */
+  onSetCadence: (weeklyTarget: number) => void;
   /** Mark/un-mark an established habit (v1.2). */
   onSetEstablished: (established: boolean) => void;
   onClose: () => void;
@@ -38,6 +41,7 @@ export function ActionDetailDialog({
   onCommitDetails,
   onSetStatus,
   onSetHabit,
+  onSetCadence,
   onSetEstablished,
   onClose,
 }: ActionDetailDialogProps) {
@@ -110,6 +114,7 @@ export function ActionDetailDialog({
   const isHabit = action?.habit ?? false;
   const established = action?.established ?? false;
   const completionCount = action?.completions.length ?? 0;
+  const weeklyTarget = action?.weeklyTarget ?? 0;
   const label =
     pillarIndex !== null && actionIndex !== null
       ? `Pillar ${pillarIndex + 1}, action ${actionIndex + 1}`
@@ -190,7 +195,7 @@ export function ActionDetailDialog({
           <span className="field__hint">Shown as a toast when you mark this done.</span>
         </label>
 
-        {/* Habit layer (v1.2): track as a daily behaviour, and graduate it. */}
+        {/* Habit layer (v1.2): track as a recurring behaviour, and graduate it. */}
         <div className="field">
           <label className="switch">
             <input
@@ -201,34 +206,60 @@ export function ActionDetailDialog({
               onChange={(e) => onSetHabit(e.target.checked)}
             />
             <span className="switch__track" aria-hidden="true" />
-            <span className="switch__label">Track daily as a habit</span>
+            <span className="switch__label">Track as a habit</span>
           </label>
           <span className="field__hint">
-            A habit is a recurring behaviour you check off each day, not a one-shot task.
+            A habit is a recurring behaviour you check off — every day, or a few set days a week.
           </span>
         </div>
 
         {isHabit ? (
-          <div className="field">
-            <label className="switch">
-              <input
-                type="checkbox"
-                className="switch__input"
-                role="switch"
-                checked={established}
-                onChange={(e) => onSetEstablished(e.target.checked)}
-              />
-              <span className="switch__track" aria-hidden="true" />
-              <span className="switch__label">Mark as established — no more daily check-ins</span>
+          <>
+            {/* Weekly cadence (v1.5, SPEC 12): daily by default, or N days/week. */}
+            <label className="field">
+              <span className="field__label">How often?</span>
+              <select
+                className="field__input"
+                value={weeklyTarget}
+                onChange={(e) => onSetCadence(Number(e.target.value))}
+              >
+                <option value={0}>Every day</option>
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <option key={n} value={n}>
+                    {n}× a week
+                  </option>
+                ))}
+              </select>
+              <span className="field__hint">
+                {weeklyTarget >= 1
+                  ? `Aim for ${weeklyTarget} day${weeklyTarget === 1 ? '' : 's'} each week. This week: ${
+                      action ? weekCompletions(action, new Date()) : 0
+                    } / ${weeklyTarget}.`
+                  : 'Check it off every day.'}
+              </span>
             </label>
-            <span className="field__hint">
-              {established
-                ? 'This habit is achieved: it counts as done and stops asking for daily check-ins. Turn off to resume tracking.'
-                : 'When a habit is second nature, establish it. It counts as done toward your progress.'}
-              {completionCount > 0 &&
-                ` ${completionCount} check-in${completionCount === 1 ? '' : 's'} recorded.`}
-            </span>
-          </div>
+
+            <div className="field">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  className="switch__input"
+                  role="switch"
+                  checked={established}
+                  onChange={(e) => onSetEstablished(e.target.checked)}
+                />
+                <span className="switch__track" aria-hidden="true" />
+                <span className="switch__label">Mark as established — no more check-ins</span>
+              </label>
+              <span className="field__hint">
+                {established
+                  ? 'This habit is achieved: it counts as done and stops asking for check-ins. Turn off to resume tracking.'
+                  : 'When a habit is second nature, establish it. It counts as done toward your progress.'}
+                {completionCount > 0 &&
+                  ` ${completionCount} check-in${completionCount === 1 ? '' : 's'} recorded.`}
+              </span>
+            </div>
+          </>
         ) : (
           <div className="field">
             <span className="field__label" id="detail-status-label">

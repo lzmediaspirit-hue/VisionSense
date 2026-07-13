@@ -25,6 +25,7 @@ export interface Action {
   established: boolean; // a graduated habit: counts as done, no more daily check-ins (v1.2)
   completions: string[]; // ISO timestamps of daily check-offs, at most one per local day (v1.2)
   cue: string; // '' = none; the "when & where" of an if-then plan (v1.4, SPEC 11.1)
+  weeklyTarget: number; // 0 = daily habit; N = target check-off days per ISO week (v1.5, SPEC 12)
 }
 
 export interface Pillar {

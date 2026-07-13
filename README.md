@@ -36,7 +36,9 @@ the goal-attainment literature (see `docs/SPEC.md` §11 for citations).
 - **Daily habits** — any action can be tracked as a daily check-off instead of
   a one-shot task; rewards fire on every check (the reinforcement loop)
 - **Established habits** — graduate a habit when it's automatic; it counts as
-  done and stops asking for daily check-ins (and can be un-established)
+  done and stops asking for check-ins (and can be un-established)
+- **Weekly habits** — track a habit as a set number of days per week (gym
+  3× / week); Today shows this-week progress and marks the goal met
 - **Progress graphs** — daily / monthly / yearly bar charts of completions,
   plus a month **calendar** shaded by activity, and a streak counter
 

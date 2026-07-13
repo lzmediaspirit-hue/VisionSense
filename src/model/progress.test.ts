@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createChart } from './factory';
 import {
+  setActionCadence,
   setActionEstablished,
   setActionHabit,
   setActionStatus,
@@ -12,6 +13,7 @@ import {
   chartProgress,
   completionRatio,
   isActionDone,
+  isWeeklyHabit,
   pillarProgress,
 } from './progress';
 
@@ -74,6 +76,28 @@ describe('progress', () => {
     chart = setActionHabit(chart, 0, 0, true, CLOCK); // ...but now a (un-established) habit
     expect(isActionDone(chart.pillars[0].actions[0])).toBe(false);
     expect(chartProgress(chart)).toEqual({ filled: 1, done: 0, total: 64 });
+  });
+
+  // --- Weekly cadence (v1.5) -------------------------------------------------
+
+  it('isWeeklyHabit is true only when habit is on and weeklyTarget >= 1', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Gym', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    chart = setActionCadence(chart, 0, 0, 3, CLOCK);
+    expect(isWeeklyHabit(chart.pillars[0].actions[0])).toBe(true);
+  });
+
+  it('isWeeklyHabit is false for a daily habit (weeklyTarget 0)', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Meditate', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    expect(isWeeklyHabit(chart.pillars[0].actions[0])).toBe(false);
+  });
+
+  it('isWeeklyHabit is false for a non-habit even with a stray weeklyTarget', () => {
+    let chart = setActionText(createChart(), 0, 0, 'One-off task', CLOCK);
+    chart = setActionCadence(chart, 0, 0, 3, CLOCK); // weeklyTarget set, but habit stays false
+    expect(chart.pillars[0].actions[0].habit).toBe(false);
+    expect(isWeeklyHabit(chart.pillars[0].actions[0])).toBe(false);
   });
 
   it('completionRatio is 0 when nothing filled', () => {

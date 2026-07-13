@@ -20,6 +20,8 @@ describe('factory / Rule of 8', () => {
         expect(action.habit).toBe(false);
         expect(action.established).toBe(false);
         expect(action.completions).toEqual([]);
+        // v1.5 weekly cadence defaults to daily (0).
+        expect(action.weeklyTarget).toBe(0);
       }
     }
   });

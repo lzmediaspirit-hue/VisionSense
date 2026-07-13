@@ -27,6 +27,15 @@ export function isActionDone(action: Action): boolean {
   return action.habit ? action.established : action.status === 'done';
 }
 
+/**
+ * Whether a habit is tracked on a weekly cadence rather than daily (v1.5,
+ * SPEC 12): a habit with a weekly target of >= 1 check-off days per ISO week.
+ * `weeklyTarget` is meaningless for a non-habit, so this is always false then.
+ */
+export function isWeeklyHabit(action: Action): boolean {
+  return action.habit && action.weeklyTarget >= 1;
+}
+
 export interface Progress {
   filled: number;
   done: number;

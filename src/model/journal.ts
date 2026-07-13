@@ -3,7 +3,7 @@
 // keying, the MIT cap, and the weekly-review "due" signal. No I/O, no React.
 
 import { localDayKey } from './completions';
-import type { DayPlan, Review } from './types';
+import type { Action, DayPlan, Review } from './types';
 
 /** Structural cap on the number of MITs ("top 3 for today"). */
 export const MAX_MITS = 3;
@@ -138,6 +138,32 @@ export function isoWeekLabel(key: string): string {
   const m = /^(\d{4})-W(\d{2})$/.exec(key);
   if (!m) return key;
   return `Week ${Number(m[2])}, ${m[1]}`;
+}
+
+// --- Weekly cadence habits (v1.5, SPEC 12) -----------------------------------
+
+/**
+ * Count of DISTINCT local days within `now`'s ISO week that have a completion
+ * (SPEC 12). A day with two completions (should not happen — `toggleHabitToday`
+ * keeps at most one per local day) would still only count once.
+ */
+export function weekCompletions(action: Action, now: Date = new Date()): number {
+  const wk = isoWeekKey(now);
+  const days = new Set<string>();
+  for (const c of action.completions) {
+    const d = new Date(c);
+    if (!Number.isNaN(d.getTime()) && isoWeekKey(d) === wk) days.add(localDayKey(d));
+  }
+  return days.size;
+}
+
+/**
+ * Whether a weekly habit has met its target for `now`'s ISO week (SPEC 12).
+ * Always false for a daily habit (`weeklyTarget === 0`) — meeting a weekly
+ * target is meaningless there.
+ */
+export function isWeeklySatisfied(action: Action, now: Date = new Date()): boolean {
+  return action.weeklyTarget >= 1 && weekCompletions(action, now) >= action.weeklyTarget;
 }
 
 // --- Weekly-review due signal (SPEC 11.3) ------------------------------------

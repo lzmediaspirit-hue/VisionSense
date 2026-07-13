@@ -497,6 +497,11 @@ button {
   min-height: 4.5rem;
   line-height: 1.45;
 }
+select.field__input {
+  /* Native select styling varies most in appearance/cursor; everything else
+     (color, background, border) is already covered by .field__input. */
+  cursor: pointer;
+}
 .field__hint {
   display: block;
   font-size: var(--fs-meta);
@@ -1642,6 +1647,18 @@ button {
 .mit__cue {
   font-size: 0.76rem;
   color: var(--text-faint);
+}
+.mit__week {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
 }
 
 /* MIT picker dialog (reuses .modal-overlay / .modal from the shared dialog kit) */
