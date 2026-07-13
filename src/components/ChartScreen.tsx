@@ -18,7 +18,7 @@ import {
 } from '../model/operations';
 import { isHabitCheckedToday } from '../model/completions';
 import { EXAMPLE_BANNER_HIDDEN_KEY, getFlag, setFlag } from '../model/onboarding';
-import { chartProgress } from '../model/progress';
+import { chartProgress, isPillarComplete, pillarProgress } from '../model/progress';
 import type { Chart, StoredStatus, ThemeId } from '../model/types';
 import { useIsCompact, usePrintMode } from '../hooks/useMediaQuery';
 import { useStore } from '../state/store';
@@ -96,17 +96,47 @@ export function ChartScreen({
     [mutateActive],
   );
 
+  // Fire the one-time "pillar complete" toast when a pillar's 8 actions
+  // transition from not-fully-done to fully-done (v1.10, SPEC 17). `nextChart`
+  // is derived by calling the same pure operation locally (not dispatched) so
+  // this check never dispatches to the store twice — mirrors how
+  // onSetEstablished already inspects `action` before mutating.
+  const maybeFirePillarToast = useCallback(
+    (pillarIndex: number, nextChart: Chart) => {
+      const pillar = chart.pillars[pillarIndex];
+      const nextPillar = nextChart.pillars[pillarIndex];
+      if (!pillar || !nextPillar) return;
+      const wasComplete = isPillarComplete(pillarProgress(pillar));
+      const isComplete = isPillarComplete(pillarProgress(nextPillar));
+      if (!wasComplete && isComplete) {
+        setToast({
+          id: Date.now(),
+          kind: 'pillar',
+          message: pillar.name.trim() || 'Pillar',
+          accent: pillar.color,
+        });
+      }
+    },
+    [chart],
+  );
+
   // Apply a status change to an action, firing the reward toast when the action
-  // transitions INTO 'done' and carries a non-empty reward (SPEC 7.3).
+  // transitions INTO 'done' and carries a non-empty reward (SPEC 7.3), and the
+  // pillar-complete toast when it's the 8th action in its pillar to finish
+  // (SPEC 17) — habit daily check-offs never reach here with target 'done',
+  // so they never trigger this.
   const applyStatus = useCallback(
     (pillarIndex: number, actionIndex: number, target: StoredStatus) => {
       const action = chart.pillars[pillarIndex]?.actions[actionIndex];
       if (action && target === 'done' && action.status !== 'done' && action.reward.trim() !== '') {
         setToast({ id: Date.now(), kind: 'reward', message: action.reward.trim() });
       }
+      if (target === 'done') {
+        maybeFirePillarToast(pillarIndex, setActionStatus(chart, pillarIndex, actionIndex, target));
+      }
       mutateActive((c) => setActionStatus(c, pillarIndex, actionIndex, target));
     },
-    [chart, mutateActive],
+    [chart, mutateActive, maybeFirePillarToast],
   );
 
   const onCycleStatus = useCallback(
@@ -150,16 +180,23 @@ export function ChartScreen({
   );
 
   // Establish / un-establish a habit. First-time establish is the graduation
-  // moment — celebrate it with a toast (SPEC 8.2).
+  // moment — celebrate it with a toast (SPEC 8.2), and also check whether it
+  // completes the pillar (SPEC 17). Un-establishing never fires either toast.
   const onSetEstablished = useCallback(
     (pillarIndex: number, actionIndex: number, established: boolean) => {
       const action = chart.pillars[pillarIndex]?.actions[actionIndex];
       if (established && action && !action.established) {
         setToast({ id: Date.now(), kind: 'establish', message: action.text.trim() || 'Habit' });
       }
+      if (established) {
+        maybeFirePillarToast(
+          pillarIndex,
+          setActionEstablished(chart, pillarIndex, actionIndex, established),
+        );
+      }
       mutateActive((c) => setActionEstablished(c, pillarIndex, actionIndex, established));
     },
-    [chart, mutateActive],
+    [chart, mutateActive, maybeFirePillarToast],
   );
 
   const onExpand = useCallback((cell: GridCell) => {

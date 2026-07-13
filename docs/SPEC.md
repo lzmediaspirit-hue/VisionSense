@@ -854,3 +854,129 @@ existing aria-label string (`Did it today: "X"`, `Undo today for "X"`,
 `Complete "X"`, `Undo "X"`, "Today view", "Pick today's top 3", "Weekly
 review", "Back to your charts"), and the MIT picker dialog are all
 unchanged. Mobile-first at 375px, no horizontal scroll.
+
+## 17. v1.10 (locked): teach visually, celebrate completion
+
+A fourth design-review pass, covering onboarding (#10) and completion
+moments (#11). **Presentation + derived state only**: `schemaVersion` stays
+`1`, no `Chart`/`Action`/`Pillar` shape changes, no new reducer actions. One
+new pure helper (`isPillarComplete` in `src/model/progress.ts`).
+
+### 17.1 How it works: the diagram does the teaching
+`HowItWorksDialog.tsx` replaces its five headings of prose beside a static
+mini-grid with a 3-step animated sequence (`step: 0 | 1 | 2`, `useState`,
+reset to 0 on every fresh open). A `.hiw-stage` (~128px, 3x3 grid of
+`.hiw-mini` tiles) shows what's being taught:
+- Step 0 "Name your goal" — the center tile lights up (`.hiw-mini--goal`,
+  the theme's solid goal background), the other 8 stay dim
+  (`.hiw-mini--dim`). Copy: "One goal at the centre. Everything on the
+  chart exists to serve it."
+- Step 1 "Choose 8 pillars" — the center tile stays lit; the 8 surrounding
+  tiles take their pillar colors (`--pillar-color-0..7`, one fixed mapping
+  from grid position to pillar slot, skipping the center). Copy: "Exactly 8
+  pillars — the Rule of 8 forces you to choose what matters."
+- Step 2 "Break each into 8 actions" — same 9-tile stage, but one pillar
+  tile (a fixed slot) gets a `.hiw-mini--exploding` treatment (scale +
+  ring), and a second small 3x3 grid (`.hiw-actions`) appears beside it: a
+  solid center tile plus 8 outer tiles that pulse in
+  (`@keyframes hiw-pulse-in`, staggered `animationDelay`) in that pillar's
+  color, representing its 8 actions. Copy: "Each pillar gets 8 concrete
+  actions — 64 in all. Make them habits with a when-and-where, and check
+  them off from Today."
+
+Navigation is a step-dot row (`.hiw-dots`, 3 buttons, each
+`aria-label="Step N"` + `aria-current`) plus a ghost "Next" button
+(`.hiw-next`) that advances the step and disappears on step 2 (kept simple:
+hidden, not disabled). All tile transitions (background/opacity/transform)
+and the pulse-in animation are CSS `transition`/`animation`, gated to `none`
+under `prefers-reduced-motion: reduce` (same pattern the toast already
+used) so the diagram still communicates its end-state instantly.
+
+Below the sequence, one condensed paragraph replaces the old "Make it a
+routine" + "Stay on track" sections: "Turn any action into a habit with a
+when-and-where cue and a reward. The **Today** view surfaces your top picks
+each day; the **Weekly review** keeps you honest." The old "Your data"
+section shrinks to a single footnote line (`.hiw-footnote`, sized like
+`.field__hint`): "Your data lives on this device — optional Google Drive
+sync backs it up to your own Drive."
+
+The dialog's `aria-label="How it works"`, the "Explore the example" /
+"Got it" buttons and their accessible names, and the once-ever auto-open
+logic in `Dashboard.tsx` (first-run detection via the seeded example chart
++ `HELP_SEEN_KEY`) are all unchanged.
+
+### 17.2 Dashboard: the Today button carries the streak
+`Dashboard.tsx` computes `streakAcrossCharts(state.charts)` (already
+exported from `src/model/completions.ts` for the Today view, SPEC 11.2),
+memoized on `charts`. When it's > 0, a small pill (`.cta-streak`, sized like
+`.due-badge` but `rgba(255,255,255,0.25)` on white text, since the Today
+button is primary-filled) renders after the label, inside
+`<span className="cta-streak" aria-hidden="true">`. Because the streak text
+is `aria-hidden`, the button carries an explicit `aria-label="Today"` so its
+accessible name stays exactly `"Today"` — `getByRole('button', { name:
+'Today', exact: true })` still resolves. At streak 0, no pill renders.
+
+### 17.3 Pillar-complete: a lit cell and a one-time toast
+A pillar is "complete" when all 8 of its action cells are both filled and
+done: `isPillarComplete(progress)` in `src/model/progress.ts` is
+`progress.filled === RULE_OF_8 && progress.done === RULE_OF_8` (unit-tested
+in `progress.test.ts`). `Cell.tsx` already receives `progress` for pillar
+cells (from `Grid.tsx`/`pillarProgress`); it derives `pillarComplete` and
+adds `is-complete` to the cell's class list. CSS:
+```css
+.cell--pillar.is-complete {
+  background: color-mix(in srgb, var(--cell-accent) 26%, var(--surface));
+}
+.cell--pillar.is-complete .cell__progress-fill {
+  background: var(--cell-accent);
+}
+```
+26% was checked against every shipped theme's pillar palette, including the
+marquee theme's darkest slot (`--pillar-color-7: #3a2f33`) — text stays
+legible. Both cells that mirror a pillar's name (the hub in the center
+block and the non-hub center-cell of the pillar's own block) receive
+`progress` and so both light up together.
+
+`ChartScreen.tsx` detects the transition into complete — never firing from
+habit daily check-offs, which don't touch `done` — via a shared
+`maybeFirePillarToast(pillarIndex, nextChart)` helper: it computes
+`isPillarComplete(pillarProgress(pillar))` on the *current* `chart` prop
+(before) and on the pillar within a `nextChart` obtained by calling the same
+pure operation (`setActionStatus` / `setActionEstablished`) locally against
+`chart` — a second, throwaway call alongside the real
+`mutateActive((c) => operation(c, ...))` dispatch, never a second dispatch
+to the store. `applyStatus` runs this check only when `target === 'done'`;
+`onSetEstablished` runs it only when `established` is being set to `true`.
+When the check flips `false` → `true`, it fires
+`{ kind: 'pillar', message: pillar.name.trim() || 'Pillar', accent:
+pillar.color }`. If a reward toast and a pillar-complete toast would both
+fire from the same click (task marked done, carries a reward, and is the
+pillar's 8th), the pillar toast wins (fires second, so it's the one shown)
+since finishing a pillar is the rarer, larger moment.
+
+### 17.4 Toast polish
+`RewardToastData` gains a third `kind: 'pillar'` (copy "Pillar complete:
+{name}", a new sparkle-burst glyph, colored via `.toast--pillar
+.toast__glyph { color: var(--toast-accent, var(--accent)) }`) and an
+optional `accent?: string`, set to the pillar's color for pillar toasts
+only (reward/establish toasts are unchanged and carry no accent). The toast
+element sets `style={{ '--toast-accent': accent }}` when present; CSS reads
+`border-left: 3px solid var(--toast-accent, var(--accent))` on `.toast` for
+every kind (a quiet default border for reward/establish, an accent one for
+pillar). The entrance animation swaps its old slide-up for a scale-in
+(`scale(0.92) → 1` + opacity, 180ms `var(--ease)`) and stays gated under
+`@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }` —
+the existing rule, unchanged in structure — so a reduced-motion viewer still
+sees the toast appear instantly rather than not at all.
+
+### 17.5 Compatibility & quality
+Dialog aria-label, "Explore the example"/"Got it" accessible names, and the
+first-run-only auto-open are untouched. The Today button's accessible name
+stays exactly `"Today"`. `RewardToast` text patterns ("Reward unlocked:",
+"Habit established:") and the `.due-badge` / `.mit__check` treatments are
+untouched. No data-model or schema changes. Mobile-first at 375px, no
+horizontal scroll; verified with Playwright against the example chart's
+"Gear & logistics" pillar (3 actions already done; marking its remaining 5
+— including its one habit, via establish — done lights the cell and fires
+the toast exactly once, on the 8th) and with `reducedMotion: 'reduce'`
+emulation (toast still appears, instantly).

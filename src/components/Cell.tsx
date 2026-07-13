@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { localDayKey } from '../model/completions';
 import type { GridCell } from '../model/grid';
-import type { Progress } from '../model/progress';
+import { isPillarComplete, type Progress } from '../model/progress';
 
 export interface CellProps {
   cell: GridCell;
@@ -169,6 +169,10 @@ function CellImpl(props: CellProps) {
     }
   }
   if (highlighted) classNames.push('is-highlighted');
+  // A pillar whose 8 actions are all filled and done gets a fully-lit
+  // treatment (v1.10, SPEC 17) — a quiet visual payoff for finishing it.
+  const pillarComplete = isPillarName && progress ? isPillarComplete(progress) : false;
+  if (pillarComplete) classNames.push('is-complete');
 
   const style =
     cell.color && cell.kind !== 'goal'

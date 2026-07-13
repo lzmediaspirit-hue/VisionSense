@@ -525,50 +525,135 @@ button {
   margin-bottom: 0.9rem;
 }
 
-/* --------------------------------------------- how-it-works dialog (v1.6) */
+/* --------------------------------------------- how-it-works dialog (v1.6; */
+/* restructured into a 3-step animated diagram in v1.10, SPEC 17)           */
 .hiw {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem 1.1rem;
+  gap: 1rem 1.3rem;
   align-items: flex-start;
 }
-.hiw__mini {
+.hiw-stage-wrap {
   flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-  width: 60px;
-  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   margin-top: 0.15rem;
 }
-.hiw__cell {
+.hiw-stage,
+.hiw-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 128px;
+  height: 128px;
+}
+.hiw-actions {
+  width: 72px;
+  height: 72px;
+}
+.hiw-mini {
   display: block;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--surface-2);
   border: 1px solid var(--border);
+  transition: background 0.22s var(--ease), border-color 0.22s var(--ease),
+    opacity 0.22s var(--ease), transform 0.22s var(--ease);
 }
-.hiw__cell--center {
-  background: var(--accent);
-  border-color: var(--accent);
+.hiw-mini--goal {
+  background: var(--goal-bg-solid);
+  border-color: var(--goal-bg-solid);
+}
+.hiw-mini--dim {
+  opacity: 0.55;
+}
+.hiw-mini--pillar {
+  background: color-mix(in srgb, var(--hiw-pillar-color) 65%, var(--surface));
+  border-color: var(--hiw-pillar-color);
+}
+.hiw-mini--exploding {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 2px var(--hiw-pillar-color);
+}
+.hiw-mini--pillar-solid {
+  background: var(--hiw-pillar-color);
+  border-color: var(--hiw-pillar-color);
+}
+.hiw-mini--action {
+  background: color-mix(in srgb, var(--hiw-pillar-color) 45%, var(--surface));
+  border-color: var(--hiw-pillar-color);
+  animation: hiw-pulse-in 0.32s var(--ease) both;
+}
+@keyframes hiw-pulse-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 .hiw__body {
   flex: 1 1 220px;
   min-width: 0;
 }
 .hiw__heading {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 650;
   color: var(--text);
-  margin: 0.9rem 0 0.25rem;
-}
-.hiw__heading:first-child {
-  margin-top: 0;
+  margin: 0 0 0.25rem;
 }
 .hiw__text {
   font-size: 0.85rem;
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
+}
+.hiw__text--loop {
+  margin-top: 1rem;
+}
+.hiw-dots {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+.hiw-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 999px;
+  border: none;
+  background: var(--border-strong);
+  cursor: pointer;
+}
+.hiw-dot.is-active {
+  background: var(--accent);
+  width: 20px;
+  border-radius: 999px;
+  transition: width 0.18s var(--ease);
+}
+.hiw-next {
+  margin-left: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.82rem;
+}
+.hiw-footnote {
+  font-size: var(--fs-meta);
+  color: var(--text-faint);
+  margin: 0.5rem 0 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hiw-mini {
+    transition: none;
+  }
+  .hiw-mini--action {
+    animation: none;
+  }
+  .hiw-dot.is-active {
+    transition: none;
+  }
 }
 
 /* ---------------------------------------------- action detail dialog (7.1) */
@@ -878,10 +963,11 @@ select.field__input {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--toast-accent, var(--accent));
   border-radius: 999px;
   padding: 0.6rem 0.75rem 0.6rem 0.95rem;
   box-shadow: 0 12px 34px rgba(15, 23, 42, 0.22);
-  animation: toast-in 0.28s var(--ease);
+  animation: toast-in 0.18s var(--ease);
 }
 .toast__glyph {
   display: inline-flex;
@@ -889,6 +975,9 @@ select.field__input {
 }
 .toast--establish .toast__glyph {
   color: var(--status-done);
+}
+.toast--pillar .toast__glyph {
+  color: var(--toast-accent, var(--accent));
 }
 .toast__text {
   font-size: 0.9rem;
@@ -917,11 +1006,11 @@ select.field__input {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: scale(0.92);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1281,6 +1370,15 @@ select.field__input {
 }
 .cell--pillar.is-empty {
   color: var(--text-faint);
+}
+/* Fully-lit pillar: all 8 actions filled and done (v1.10, SPEC 17). 26%
+ * verified for contrast against --text across every theme's pillar palette,
+ * including the marquee theme's darkest slot (--pillar-color-7: #3a2f33). */
+.cell--pillar.is-complete {
+  background: color-mix(in srgb, var(--cell-accent) 26%, var(--surface));
+}
+.cell--pillar.is-complete .cell__progress-fill {
+  background: var(--cell-accent);
 }
 .cell--pillar::before {
   content: '';
@@ -1720,6 +1818,24 @@ select.field__input {
  * of overlapping it (the pill is wider than the dot it replaced). */
 .dashboard__cta-review:has(.due-badge) {
   padding-right: 1.4rem;
+}
+/* Streak pill on the primary Today CTA (v1.10, SPEC 17): plain-text streak
+ * count, hidden from the accessible name (the button carries its own
+ * aria-label="Today" so it keeps matching `exact: true` queries). */
+.cta-streak {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 0.35rem;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.25);
 }
 .due-badge {
   position: absolute;
