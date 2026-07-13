@@ -6,13 +6,17 @@ import { useEffect } from 'react';
  *                   task completion and each habit daily check.
  *   - 'establish' — "Habit established: {message}" (SPEC 8.2), the graduation
  *                   moment when a habit is first marked established.
+ *   - 'pillar'    — "Pillar complete: {message}" (v1.10, SPEC 17), fired once
+ *                   when a pillar's 8 actions all become filled and done.
  */
 export interface RewardToastData {
   /** Fresh id per firing so re-triggering the same toast restarts the timer. */
   id: number;
-  kind: 'reward' | 'establish';
-  /** The reward text (reward kind) or the habit title (establish kind). */
+  kind: 'reward' | 'establish' | 'pillar';
+  /** The reward text (reward kind), habit title (establish kind), or pillar name (pillar kind). */
   message: string;
+  /** Optional accent color (e.g. the pillar's color) for the toast's left border (v1.10). */
+  accent?: string;
 }
 
 interface RewardToastProps {
@@ -23,11 +27,12 @@ interface RewardToastProps {
 const AUTO_DISMISS_MS = 5000;
 
 /**
- * Celebration toast (SPEC 7.3 + 8.2). Quiet and tasteful: one at a time,
+ * Celebration toast (SPEC 7.3 + 8.2 + 17). Quiet and tasteful: one at a time,
  * auto-dismisses after ~5s, manually dismissible, announced via aria-live
  * polite, and honours prefers-reduced-motion (the entrance animation is gated
  * in CSS). Rendered as a live region that is always present so screen readers
- * pick up the change even as content swaps in.
+ * pick up the change even as content swaps in. An optional `accent` (v1.10)
+ * paints a colored left border via `--toast-accent`.
  */
 export function RewardToast({ toast, onDismiss }: RewardToastProps) {
   useEffect(() => {
@@ -36,14 +41,29 @@ export function RewardToast({ toast, onDismiss }: RewardToastProps) {
     return () => clearTimeout(timer);
   }, [toast, onDismiss]);
 
-  const isEstablish = toast?.kind === 'establish';
+  const kind = toast?.kind;
+  const prefix =
+    kind === 'establish' ? 'Habit established: ' : kind === 'pillar' ? 'Pillar complete: ' : 'Reward unlocked: ';
+  const style =
+    toast?.accent !== undefined ? ({ ['--toast-accent' as string]: toast.accent } as React.CSSProperties) : undefined;
 
   return (
     <div className="toast-region" aria-live="polite" aria-atomic="true">
       {toast && (
-        <div className={`toast ${isEstablish ? 'toast--establish' : ''}`.trim()} role="status" key={toast.id}>
+        <div
+          className={[
+            'toast',
+            kind === 'establish' ? 'toast--establish' : '',
+            kind === 'pillar' ? 'toast--pillar' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          style={style}
+          role="status"
+          key={toast.id}
+        >
           <span className="toast__glyph" aria-hidden="true">
-            {isEstablish ? (
+            {kind === 'establish' ? (
               <svg viewBox="0 0 24 24" width="18" height="18">
                 <circle cx="12" cy="10" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" />
                 <path
@@ -62,6 +82,13 @@ export function RewardToast({ toast, onDismiss }: RewardToastProps) {
                   strokeLinejoin="round"
                 />
               </svg>
+            ) : kind === 'pillar' ? (
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <path
+                  d="M12 2l2.6 5.3 5.9.9-4.3 4.2 1 5.8L12 15.4 6.8 18.2l1-5.8L3.5 8.2l5.9-.9L12 2z"
+                  fill="currentColor"
+                />
+              </svg>
             ) : (
               <svg viewBox="0 0 24 24" width="18" height="18">
                 <path
@@ -72,7 +99,7 @@ export function RewardToast({ toast, onDismiss }: RewardToastProps) {
             )}
           </span>
           <span className="toast__text">
-            {isEstablish ? 'Habit established: ' : 'Reward unlocked: '}
+            {prefix}
             <strong>{toast.message}</strong>
           </span>
           <button

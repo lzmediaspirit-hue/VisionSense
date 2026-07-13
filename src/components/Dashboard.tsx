@@ -3,7 +3,8 @@
 // and JSON import. Export (JSON/PNG) and print live in ChartScreen's header
 // since they act on the chart currently open there.
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { streakAcrossCharts } from '../model/completions';
 import { parseChartImport } from '../model/exportImport';
 import { isReviewDue } from '../model/journal';
 import { getFlag, HELP_SEEN_KEY, setFlag } from '../model/onboarding';
@@ -35,6 +36,9 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
     useStore();
   const charts = state.charts;
   const reviewDue = isReviewDue(state.reviews);
+  // Live streak across all charts (v1.10, SPEC 17), shown as a small pill on
+  // the Today CTA — a completion moment that costs nothing to compute.
+  const streak = useMemo(() => streakAcrossCharts(charts), [charts]);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -141,8 +145,18 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
       </header>
 
       <div className="dashboard__cta">
-        <button type="button" className="btn btn--primary dashboard__cta-today" onClick={onOpenToday}>
+        <button
+          type="button"
+          className="btn btn--primary dashboard__cta-today"
+          onClick={onOpenToday}
+          aria-label="Today"
+        >
           <span aria-hidden="true">☀</span> Today
+          {streak > 0 && (
+            <span className="cta-streak" aria-hidden="true">
+              {streak}
+            </span>
+          )}
         </button>
         <button
           type="button"

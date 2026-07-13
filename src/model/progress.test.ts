@@ -13,6 +13,7 @@ import {
   chartProgress,
   completionRatio,
   isActionDone,
+  isPillarComplete,
   isWeeklyHabit,
   pillarProgress,
 } from './progress';
@@ -103,5 +104,14 @@ describe('progress', () => {
   it('completionRatio is 0 when nothing filled', () => {
     expect(completionRatio({ filled: 0, done: 0, total: 8 })).toBe(0);
     expect(completionRatio({ filled: 4, done: 1, total: 8 })).toBe(0.25);
+  });
+
+  // --- Pillar-complete (v1.10, SPEC 17) --------------------------------------
+
+  it('isPillarComplete is true only when all 8 slots are filled and done', () => {
+    expect(isPillarComplete({ filled: 8, done: 8, total: 8 })).toBe(true);
+    expect(isPillarComplete({ filled: 8, done: 7, total: 8 })).toBe(false);
+    expect(isPillarComplete({ filled: 7, done: 7, total: 8 })).toBe(false);
+    expect(isPillarComplete({ filled: 0, done: 0, total: 8 })).toBe(false);
   });
 });

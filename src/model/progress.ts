@@ -54,6 +54,11 @@ export function pillarProgress(pillar: Pillar): Progress {
   return { filled, done, total: RULE_OF_8 };
 }
 
+/** Whether every one of a pillar's 8 action cells is filled AND done (v1.10, SPEC 17). */
+export function isPillarComplete(progress: Progress): boolean {
+  return progress.filled === RULE_OF_8 && progress.done === RULE_OF_8;
+}
+
 export function chartProgress(chart: Chart): Progress {
   let filled = 0;
   let done = 0;
