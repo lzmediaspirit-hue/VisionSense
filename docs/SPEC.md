@@ -564,3 +564,127 @@ a crash. Because seeding is gated purely on `charts.length === 0`, an
 existing user with any chart — including one who has never opened this
 version of the app before — is completely unaffected: no seeded chart, no
 auto-opened dialog, no new badge or banner anywhere in their data.
+
+## 14. v1.7 (locked): visual polish
+
+A design pass from a UI/UX review, CSS-first with a handful of small
+component edits. **Presentation only**: `schemaVersion` stays `1`, no
+`Chart`/`Action` shape changes, no new reducer actions, no behavior change to
+any existing feature — every change below is either a CSS rule or a
+render-time (not data) decision.
+
+### 14.1 Empty ACTION cells are quiet by default
+A fresh or partly-filled chart used to render the word "Action" in faint
+gray across every empty action cell — up to 62 repeated labels on a mostly
+empty 8x8 grid, visible on screen, in the PNG export, and on the printed
+page. `PLACEHOLDER` in `Cell.tsx` is unchanged (still `'Action'`), but its
+visibility is now conditional:
+- **Screen** (`src/index.css`): `.cell--action.is-empty .cell__placeholder`
+  is `opacity: 0` at rest and fades to `opacity: 1` on
+  `:hover`/`:focus-within` (120ms). `:focus-within` on the cell shell (which
+  carries the roving `tabIndex`) means the reveal fires for keyboard
+  navigation exactly like it does for mouse hover. GOAL and PILLAR
+  placeholders are untouched — they stay always-visible, since that
+  structure ("Your goal", "Pillar") is what teaches the Rule of 8 to a new
+  chart.
+- **PNG export** (`src/export/renderChartPng.ts`): `renderChartPng` now
+  skips the text-draw step entirely for an empty action cell
+  (`!isFilled && cell.kind === 'action'`) — a static image has no hover
+  state, so the quiet default is to omit the placeholder rather than show it
+  unconditionally. Empty goal/pillar cells still draw their placeholder.
+- **Print**: `.chart-header` (and therefore the coaching hint) is already
+  `display: none` under `@media print`; the on-screen opacity-0 default for
+  empty action placeholders is not overridden by any print rule, so printed
+  pages show the same blank-at-rest cells with no extra CSS needed.
+
+### 14.2 A display type tier
+`src/themes/themes.css` adds one structural token to `:root`:
+`--fs-display: clamp(1.7rem, 4vw, 2.4rem)`, applied (via `index.css`) to
+`.today__date`, `.review__week`, and `.dashboard__title` as
+`font-weight: 700; letter-spacing: -0.02em; line-height: 1.1`, replacing
+their previous flat `1.35rem/650` treatment. These three headings are the
+app's emotional anchors (today's date, the week being reviewed, the app's
+own name on first load) and now read with real typographic presence instead
+of body-text weight. The clamp keeps them from overflowing at a 375px
+viewport without a separate media query.
+
+`--fs-goal` (the Mandala goal cell's font token) is bumped from `0.98rem` to
+`1.15rem` for the same reason at grid scale. Because the goal cell is a
+fixed ~73px square regardless of viewport (the desktop grid's cell width is
+capped by `--grid-max: 860px` past the 900px compact breakpoint), a flat
+increase reintroduced the mid-word shearing described in 14.3 — verified
+against the shipped example chart's own goal, "Finish my first marathon"
+(see 14.3 for the fix).
+
+### 14.3 Cell text wraps and hyphenates instead of shearing
+Long single words in a narrow GOAL or PILLAR cell (e.g. a pillar renamed
+"Team & Relationships") used to hard-break mid-syllable with no visible
+hyphen — `overflow-wrap: break-word` firing without `hyphens: auto`
+producing a readable result. `.cell--goal .cell__text` and
+`.cell--pillar .cell__text` now add `text-wrap: balance` (more even line
+breaks) on top of the existing `hyphens: auto; overflow-wrap: break-word`.
+
+That alone was not sufficient: this deployment environment's headless
+Chromium ships no hyphenation dictionary, so `hyphens: auto` is a silent
+no-op there (real end-user browsers on macOS/Windows typically do have one,
+but the fix cannot depend on that). Verified empirically at both 1280px and
+375px viewports with a pillar named "Team & Relationships": the word
+"Relationships" alone is wider than the ~73px desktop grid cell at any font
+size above ~11.1px, so both `.cell--pillar .cell__text` and
+`.cell--goal .cell__text` now carry a `clamp()`-based font-size step-down
+(`clamp(0.66rem, 2.4vw, 0.68rem)` for pillar text, `clamp(0.82rem, 2.4vw,
+0.9rem)` for goal text) whose *ceiling* — not just its floor — sits below
+the measured shearing threshold for each cell's font weight. A vw-scaled
+`clamp()` alone was not enough: because desktop cell width plateaus past the
+900px breakpoint, a naive clamp's preferred value quickly exceeds its own
+ceiling and the type never actually shrinks, which is why both ceilings were
+tuned down directly rather than left at the cell's base `--fs-pillar`/
+`--fs-goal`. This is a best-effort mitigation, not a guarantee: a single
+word longer than ~12 characters (e.g. "Craftsmanship") can still shear in a
+goal cell at any font size that fits a ~73px square — a pre-existing
+limitation, unchanged by this pass, that only a real hyphenation dictionary
+can fully solve.
+
+### 14.4 Chart header diet
+`ChartScreen.tsx`'s header used to show: back button, the static
+"VisionSense" brand, the theme switcher, Today, Progress, three separate
+export/print buttons, the progress strip, and a permanent coaching hint —
+enough chrome that the export buttons wrapped to a second row on mobile.
+- **Export ▾ menu**: "Export JSON", "Export PNG", and "Print" collapse into
+  one ghost button ("Export ▾") that toggles a `.chart-header__menu-popover`
+  (`role="menu"`, items are `role="menuitem"` `<button>`s calling the same
+  `onExportJson`/`onExportPng`/`onPrint` handlers as before — export/print
+  *behavior* is unchanged, only its presentation). The trigger carries
+  `aria-haspopup="menu"` and `aria-expanded`. Open state is a plain
+  `useState`; a `useEffect` (only attached while open) adds
+  `mousedown`/`keydown` listeners on `document` that close the menu on an
+  outside click or `Escape`, mirroring the outside-click/Esc pattern already
+  used by this app's native `<dialog>`s but implemented directly since this
+  is a lightweight popover, not a modal. Each menu item also closes the menu
+  after firing its handler. Today (primary) and Progress (ghost) stay as
+  standalone visible buttons.
+- **Goal as header title**: `.chart-header__brand` (the static "VisionSense"
+  wordmark) is replaced by `.chart-header__title`, showing
+  `chart.goal.trim() || 'Untitled chart'` — better wayfinding when several
+  charts are open across tabs/sessions. Single-line, `text-overflow:
+  ellipsis`, with a native `title` tooltip for the untruncated value.
+- **Auto-hiding coaching hint**: `.chart-header__hint` ("8 pillars,
+  exactly...") now only renders while `chartProgress(chart).filled < 8` —
+  it's a build-time nudge for a chart that hasn't gotten going yet, not
+  permanent chrome. No persistence: it reappears if filled count ever drops
+  back below 8 (e.g. after clearing actions), which is fine since it's
+  purely advisory.
+- The theme switcher is unchanged (not folded into the menu), and no
+  export/print behavior changed — only how the three actions are presented.
+
+### 14.5 Quick wins
+- **Faint-text contrast**: `--text-faint` is nudged darker in all four
+  themes (minimal `#aab0bd`→`#8a90a0`, stadium `#93a89b`→`#7a9184`, marquee
+  `#a8977e`→`#8f7d63`, campus `#9aa6bb`→`#828fa6`) so the now-hover-revealed
+  action placeholders (14.1) and other faint text clear roughly 3.5:1
+  contrast on their surfaces. The PNG exporter reads this var at export time
+  (`resolveThemeColors`), so it stays in sync automatically.
+- **Cell title tooltips**: `Cell.tsx`'s filled-text `<span>` now carries
+  `title={cell.text}` when the cell is filled, so a desktop user can hover a
+  clamped/truncated cell (long action text especially) to read the full
+  value without opening the detail dialog.

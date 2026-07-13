@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { downloadBlob, chartFileStem } from '../export/download';
 import { downloadChartPng } from '../export/renderChartPng';
 import { serializeChartExport } from '../model/exportImport';
@@ -18,6 +18,7 @@ import {
 } from '../model/operations';
 import { isHabitCheckedToday } from '../model/completions';
 import { EXAMPLE_BANNER_HIDDEN_KEY, getFlag, setFlag } from '../model/onboarding';
+import { chartProgress } from '../model/progress';
 import type { Chart, StoredStatus, ThemeId } from '../model/types';
 import { useIsCompact, usePrintMode } from '../hooks/useMediaQuery';
 import { useStore } from '../state/store';
@@ -54,6 +55,30 @@ export function ChartScreen({
   // localStorage flag, so re-opening the chart never brings it back.
   const [bannerHidden, setBannerHidden] = useState(() => getFlag(EXAMPLE_BANNER_HIDDEN_KEY));
   const isExample = chart.templateId === EXAMPLE_TEMPLATE_ID;
+
+  // Export ▾ menu (v1.7): collapses Export JSON / Export PNG / Print into one
+  // ghost button + popover so the header doesn't wrap to a second row on
+  // mobile. Closes on outside-click, Escape, or after choosing an item.
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExportMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [exportMenuOpen]);
 
   const onCommitText = useCallback(
     (cell: GridCell, text: string) => {
@@ -171,6 +196,13 @@ export function ChartScreen({
     window.print();
   }, []);
 
+  // The header shows the chart's goal as wayfinding instead of the static
+  // app brand (v1.7).
+  const chartTitle = chart.goal.trim() || 'Untitled chart';
+  // Coaching hint auto-hides once the chart is established (v1.7) — it's a
+  // build-time nudge, not permanent chrome.
+  const showHint = chartProgress(chart).filled < 8;
+
   return (
     <div className="chart-screen" data-theme={chart.themeId}>
       <header className="chart-header">
@@ -183,7 +215,9 @@ export function ChartScreen({
           >
             <span aria-hidden="true">‹</span> Charts
           </button>
-          <span className="chart-header__brand">VisionSense</span>
+          <span className="chart-header__title" title={chartTitle}>
+            {chartTitle}
+          </span>
           <span className="chart-header__spacer" />
         </div>
 
@@ -196,22 +230,63 @@ export function ChartScreen({
             <button type="button" className="btn btn--ghost" onClick={() => setProgressOpen(true)}>
               Progress
             </button>
-            <button type="button" className="btn btn--ghost" onClick={onExportJson}>
-              Export JSON
-            </button>
-            <button type="button" className="btn btn--ghost" onClick={onExportPng}>
-              Export PNG
-            </button>
-            <button type="button" className="btn btn--ghost" onClick={onPrint}>
-              Print
-            </button>
+            <div className="chart-header__menu" ref={exportMenuRef}>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                aria-haspopup="menu"
+                aria-expanded={exportMenuOpen}
+                onClick={() => setExportMenuOpen((open) => !open)}
+              >
+                Export <span aria-hidden="true">▾</span>
+              </button>
+              {exportMenuOpen && (
+                <div className="chart-header__menu-popover" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="chart-header__menu-item"
+                    onClick={() => {
+                      onExportJson();
+                      setExportMenuOpen(false);
+                    }}
+                  >
+                    Export JSON
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="chart-header__menu-item"
+                    onClick={() => {
+                      onExportPng();
+                      setExportMenuOpen(false);
+                    }}
+                  >
+                    Export PNG
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="chart-header__menu-item"
+                    onClick={() => {
+                      onPrint();
+                      setExportMenuOpen(false);
+                    }}
+                  >
+                    Print
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <ProgressStrip chart={chart} />
-        <p className="chart-header__hint">
-          8 pillars, exactly — if you have 9, merge two. Actions should be measurable behaviours.
-        </p>
+        {showHint && (
+          <p className="chart-header__hint">
+            8 pillars, exactly — if you have 9, merge two. Actions should be measurable behaviours.
+          </p>
+        )}
       </header>
 
       {isExample && !bannerHidden && (

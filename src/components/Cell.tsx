@@ -212,7 +212,10 @@ function CellImpl(props: CellProps) {
           aria-label={`Edit ${cell.kind}`}
         />
       ) : (
-        <span className={isFilled ? 'cell__text' : 'cell__text cell__placeholder'}>
+        <span
+          className={isFilled ? 'cell__text' : 'cell__text cell__placeholder'}
+          title={isFilled ? cell.text : undefined}
+        >
           {isFilled ? cell.text : PLACEHOLDER[cell.kind]}
         </span>
       )}

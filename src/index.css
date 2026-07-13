@@ -133,10 +133,11 @@ button {
   color: var(--accent);
 }
 .dashboard__title {
-  font-size: 1.35rem;
-  font-weight: 650;
+  font-size: var(--fs-display);
+  font-weight: 700;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 .dashboard__subtitle {
   font-size: 0.82rem;
@@ -962,17 +963,21 @@ select.field__input {
   gap: 0.5rem;
   margin-bottom: 0.6rem;
 }
-.chart-header__brand {
+.chart-header__title {
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(60vw, 420px);
 }
 .chart-header__spacer,
 .chart-header__row .btn {
   flex: 1 1 0;
 }
-.chart-header__brand {
-  flex: 0 0 auto;
+.chart-header__title {
+  flex: 0 1 auto;
 }
 .chart-header__row .btn {
   justify-content: flex-start;
@@ -1004,6 +1009,38 @@ select.field__input {
 .chart-header__actions .btn {
   font-size: 0.78rem;
   padding: 0.4rem 0.75rem;
+}
+.chart-header__menu {
+  position: relative;
+}
+.chart-header__menu-popover {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 9.5rem;
+  padding: 0.3rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.22);
+}
+.chart-header__menu-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+}
+.chart-header__menu-item:hover {
+  background: var(--surface-2);
 }
 
 /* Example-chart banner (v1.6, SPEC 13) — slim, subtle, theme-agnostic. */
@@ -1139,12 +1176,63 @@ select.field__input {
   hyphens: auto;
   width: 100%;
 }
+/* Goal/pillar labels balance across lines instead of shearing a long single
+ * word mid-syllable (e.g. "Team & Relationships" in a narrow pillar cell).
+ * `hyphens: auto` above still engages when a word alone is wider than the
+ * cell; a size step keeps that hyphenation legible at both desktop and
+ * mobile widths. */
+.cell--goal .cell__text,
+.cell--pillar .cell__text {
+  text-wrap: balance;
+}
+.cell--goal .cell__text {
+  /* Same fixed-cell-width reasoning as the pillar clamp below, tuned for the
+   * goal cell's bolder weight. Verified empirically: the shipped example
+   * goal "Finish my first marathon" hard-breaks "marathon" -> "maratho" +
+   * "n" at the bumped --fs-goal (1.15rem / 18.4px) — even at var(--fs-goal)
+   * alone, well before any exotic input. 16px was the smallest size in that
+   * probe that still shears; this clamp's ceiling sits below that with
+   * margin, while staying above the pre-v1.7 goal size so the bump still
+   * reads on short goals (the common case). Very long single words (12+
+   * chars, e.g. "Craftsmanship") can still shear at any size that fits a
+   * ~73px cell — that limitation predates this change and isn't solvable
+   * without a real hyphenation dictionary. */
+  font-size: clamp(0.82rem, 2.4vw, 0.9rem);
+}
+.cell--pillar .cell__text {
+  /* The desktop 3x3 grid holds cell width near-constant (~90px) across every
+   * viewport past the 900px compact breakpoint, so a naive vw-scaled clamp
+   * plateaus at its own ceiling there and never actually shrinks the type.
+   * Verified empirically (Chromium, headless Linux, 1280px viewport, ~73px
+   * available text width): a single long word like "Relationships" at
+   * var(--fs-pillar) (13.76px) or even 12px hard-breaks mid-syllable with no
+   * visible hyphen (this environment ships no hyphenation dictionary, so
+   * `hyphens: auto` is a no-op — overflow-wrap's hard break is what actually
+   * fires). 11.1px was the largest size in that same probe that still wraps
+   * "Team & Relationships" cleanly between words; this clamp's ceiling sits
+   * below that with margin. The vw term only matters below ~300px viewport
+   * width, where it drops further to the floor. */
+  font-size: clamp(0.66rem, 2.4vw, 0.68rem);
+}
 .cell__placeholder {
   color: var(--text-faint);
   font-weight: 400;
 }
 .cell.is-empty:hover .cell__placeholder {
   color: var(--text-muted);
+}
+
+/* Empty ACTION cells stay quiet at rest — the word "Action" repeated across
+ * up to 64 blank cells reads as clutter on a fresh/partly-filled chart and in
+ * PNG/print exports. Reveal the placeholder only on hover/keyboard focus; the
+ * GOAL and PILLAR placeholders stay always-visible (they teach the method). */
+.cell--action.is-empty .cell__placeholder {
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+.cell--action.is-empty:hover .cell__placeholder,
+.cell--action.is-empty:focus-within .cell__placeholder {
+  opacity: 1;
 }
 
 .cell--pillar {
@@ -1617,10 +1705,11 @@ select.field__input {
   margin-bottom: 0.2rem;
 }
 .today__date {
-  font-size: 1.35rem;
-  font-weight: 650;
+  font-size: var(--fs-display);
+  font-weight: 700;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 .today__streak {
   display: flex;
@@ -1876,10 +1965,11 @@ select.field__input {
   margin-bottom: 1.5rem;
 }
 .review__week {
-  font-size: 1.35rem;
-  font-weight: 650;
+  font-size: var(--fs-display);
+  font-weight: 700;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 .review__intro {
   color: var(--text-muted);
