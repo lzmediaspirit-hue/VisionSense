@@ -11,6 +11,7 @@ import { chartProgress } from '../model/progress';
 import { useStore } from '../state/store';
 import { EXAMPLE_TEMPLATE_ID } from '../templates/example';
 import type { Template } from '../templates/templates';
+import { ChartThumb } from './ChartThumb';
 import { ConfirmDialog } from './ConfirmDialog';
 import { HowItWorksDialog } from './HowItWorksDialog';
 import { SyncWidget } from './SyncWidget';
@@ -150,11 +151,13 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
           aria-label={reviewDue ? 'Review (due)' : 'Review'}
         >
           Review
-          {reviewDue && <span className="due-badge" aria-hidden="true" />}
+          {reviewDue && (
+            <span className="due-badge" aria-hidden="true">
+              1
+            </span>
+          )}
         </button>
       </div>
-
-      <SyncWidget />
 
       {importError && (
         <p className="dashboard__error" role="alert">
@@ -191,11 +194,7 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
                     className="chart-card__open"
                     onClick={() => openChart(chart.id)}
                   >
-                    <span
-                      className="chart-card__swatch"
-                      data-theme={chart.themeId}
-                      aria-hidden="true"
-                    />
+                    <ChartThumb chart={chart} />
                     <span className="chart-card__body">
                       <span className="chart-card__title-row">
                         <span className="chart-card__title">{title}</span>
@@ -242,6 +241,8 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
           })}
         </ul>
       )}
+
+      <SyncWidget />
 
       <TemplatePicker
         open={pickerOpen}

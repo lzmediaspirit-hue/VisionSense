@@ -13,7 +13,6 @@
   --fs-cell: 0.78rem;
   --fs-display: clamp(1.7rem, 4vw, 2.4rem);
   --fs-goal: 1.15rem;
-  --fs-pillar: 0.86rem;
   --fs-meta: 0.72rem;
 
   /* Structure */
@@ -89,8 +88,8 @@
   --text-muted: #4c6357;
   --text-faint: #7a9184;
 
-  --border: #1f4a2c;
-  --border-strong: #0f2818;
+  --border: #d9e4dc;
+  --border-strong: #b9c9be;
   --focus-ring: #ffb703;
 
   --accent: #1f7a3d;
@@ -131,8 +130,8 @@
   --text-muted: #6b5a45;
   --text-faint: #8f7d63;
 
-  --border: #4a1e28;
-  --border-strong: #170f12;
+  --border: #e4d9c6;
+  --border-strong: #c9bba0;
   --focus-ring: #d4af37;
 
   --accent: #8c1c34;
