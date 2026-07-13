@@ -6,6 +6,12 @@
 // When sync is not configured (empty effective client ID) this provider does
 // nothing at all: no effects run, no script loads, no context value is produced
 // beyond `configured: false`, and the widget renders nothing.
+//
+// Token persistence (SPEC 10.6): the access token is cached in sync metadata,
+// not just in memory, so a page refresh reuses it until it expires instead of
+// re-requesting from GIS. That request is what could surface as a popup, so
+// the load-time effect never makes it when the cached token has expired —
+// it lands in the "reconnect" state and waits for a user gesture instead.
 
 import {
   createContext,
@@ -127,16 +133,30 @@ function SyncController({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Acquire a valid access token, reusing the in-memory one until it nears expiry.
+  // Acquire a valid access token. For a silent request (prompt === '') this
+  // never calls GIS unless nothing usable is cached: in-memory token first,
+  // then the one persisted in sync metadata (hydrating tokenRef from it), and
+  // only then a silent GIS request. That last step is what would pop a
+  // sign-in window on load if GIS can't grant silently, so avoiding it
+  // whenever a stored token is still valid is the fix for the refresh-popup
+  // bug.
   const acquireToken = useCallback(
     async (prompt: '' | 'consent'): Promise<string> => {
       const current = tokenRef.current;
       if (prompt === '' && current && current.expiresAt > Date.now()) return current.accessToken;
+      if (prompt === '') {
+        const stored = loadSyncMeta();
+        if (stored.accessToken && stored.tokenExpiresAt && stored.tokenExpiresAt > Date.now()) {
+          tokenRef.current = { accessToken: stored.accessToken, expiresAt: stored.tokenExpiresAt };
+          return stored.accessToken;
+        }
+      }
       const token = await requestAccessToken(clientId, prompt);
       tokenRef.current = token;
+      persist({ accessToken: token.accessToken, tokenExpiresAt: token.expiresAt });
       return token.accessToken;
     },
-    [clientId],
+    [clientId, persist],
   );
 
   // Full sync: pull remote -> merge with local -> save merged locally -> push.
@@ -243,6 +263,7 @@ function SyncController({ children }: { children: ReactNode }) {
             : opts.silentAuthOnly === true;
         if (authFailed) {
           tokenRef.current = null;
+          persist({ accessToken: null, tokenExpiresAt: null });
           setStatus('reconnect');
         } else {
           setStatus('error');
@@ -252,7 +273,7 @@ function SyncController({ children }: { children: ReactNode }) {
         runningRef.current = false;
       }
     },
-    [],
+    [persist],
   );
 
   const connect = useCallback(() => {
@@ -270,10 +291,12 @@ function SyncController({ children }: { children: ReactNode }) {
       clearTimeout(pushTimer.current);
       pushTimer.current = null;
     }
-    const token = tokenRef.current;
-    if (token) revokeAccessToken(token.accessToken);
+    // Revoke whichever token we have — in-memory, or the one persisted from a
+    // previous load if this tab never re-acquired one. Best effort either way.
+    const token = tokenRef.current?.accessToken ?? loadSyncMeta().accessToken;
+    if (token) revokeAccessToken(token);
     tokenRef.current = null;
-    clearSyncMeta();
+    clearSyncMeta(); // also wipes the persisted access token.
     syncedChartsRef.current = null;
     syncedDaysRef.current = null;
     syncedReviewsRef.current = null;
@@ -283,13 +306,25 @@ function SyncController({ children }: { children: ReactNode }) {
     setStatus('disconnected');
   }, []);
 
-  // Load-time silent reconnect: if a previous session was connected, try a silent
-  // token + pull/merge/push. Failure leaves the widget in the "reconnect" state.
+  // Load-time silent reconnect: if a previous session was connected AND we
+  // still have an unexpired token from that session, reuse it for a
+  // pull/merge/push (acquireToken will find it in metadata and skip GIS
+  // entirely). Otherwise land straight in "reconnect" without ever calling
+  // GIS — a `prompt: ''` request there is what popped a sign-in window on
+  // every refresh, since GIS falls back to a popup whenever it can't grant
+  // silently (Testing-mode consent, blocked third-party cookies, multiple
+  // signed-in accounts).
   const didInit = useRef(false);
   useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
-    if (!loadSyncMeta().enabled) return;
+    const meta = loadSyncMeta();
+    if (!meta.enabled) return;
+    const hasValidToken = meta.accessToken !== null && (meta.tokenExpiresAt ?? 0) > Date.now();
+    if (!hasValidToken) {
+      setStatus('reconnect');
+      return;
+    }
     void run(() => fullSync(''), { silentAuthOnly: true });
   }, [run, fullSync]);
 

@@ -31,6 +31,8 @@ describe('sync metadata', () => {
       lastSyncAt: '2026-07-01T00:00:00.000Z',
       // one valid, one junk value that must be dropped on reload
       deletedChartIds: { a: '2026-07-01T00:00:00.000Z', b: 'not-a-date' },
+      accessToken: null,
+      tokenExpiresAt: null,
     });
     const loaded = loadSyncMeta();
     expect(loaded.enabled).toBe(true);
@@ -52,6 +54,48 @@ describe('sync metadata', () => {
     saveSyncMeta({ ...defaultSyncMeta(), enabled: true });
     recordChartDeletion('x', '2026-07-01T00:00:00.000Z');
     expect(loadSyncMeta().deletedChartIds).toEqual({ x: '2026-07-01T00:00:00.000Z' });
+  });
+
+  it('round-trips accessToken and tokenExpiresAt', () => {
+    saveSyncMeta({
+      ...defaultSyncMeta(),
+      enabled: true,
+      accessToken: 'ya29.token',
+      tokenExpiresAt: 1_800_000_000_000,
+    });
+    const loaded = loadSyncMeta();
+    expect(loaded.accessToken).toBe('ya29.token');
+    expect(loaded.tokenExpiresAt).toBe(1_800_000_000_000);
+  });
+
+  it('defaults accessToken/tokenExpiresAt to null for a legacy blob missing the fields', () => {
+    localStorage.setItem(
+      SYNC_META_KEY,
+      JSON.stringify({
+        enabled: true,
+        email: 'me@example.com',
+        fileId: 'file123',
+        lastSyncAt: null,
+        deletedChartIds: {},
+      }),
+    );
+    const loaded = loadSyncMeta();
+    expect(loaded.accessToken).toBeNull();
+    expect(loaded.tokenExpiresAt).toBeNull();
+  });
+
+  it('defaults accessToken/tokenExpiresAt to null when the stored values have the wrong type', () => {
+    localStorage.setItem(
+      SYNC_META_KEY,
+      JSON.stringify({
+        ...defaultSyncMeta(),
+        accessToken: 12345, // must be a string
+        tokenExpiresAt: '2026-07-01T00:00:00.000Z', // must be a finite number
+      }),
+    );
+    const loaded = loadSyncMeta();
+    expect(loaded.accessToken).toBeNull();
+    expect(loaded.tokenExpiresAt).toBeNull();
   });
 
   it('clearSyncMeta removes the blob', () => {

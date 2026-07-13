@@ -18,10 +18,25 @@ export interface SyncMeta {
   lastSyncAt: string | null;
   /** chartId -> ISO timestamp of deletion. */
   deletedChartIds: Tombstones;
+  // Access token cache (SPEC 10.6). Scoped to drive.appdata only and short-lived
+  // (<=1h), so storing it in localStorage is an accepted tradeoff for a
+  // backend-less app: it lets a page refresh reuse the token instead of
+  // re-prompting, without any server to hold it more safely.
+  accessToken: string | null;
+  /** epoch ms when accessToken expires (safety margin already applied). */
+  tokenExpiresAt: number | null;
 }
 
 export function defaultSyncMeta(): SyncMeta {
-  return { enabled: false, email: '', fileId: null, lastSyncAt: null, deletedChartIds: {} };
+  return {
+    enabled: false,
+    email: '',
+    fileId: null,
+    lastSyncAt: null,
+    deletedChartIds: {},
+    accessToken: null,
+    tokenExpiresAt: null,
+  };
 }
 
 /** Keep only string->string entries whose value parses as a date. */
@@ -48,6 +63,11 @@ export function loadSyncMeta(): SyncMeta {
       fileId: typeof parsed.fileId === 'string' ? parsed.fileId : null,
       lastSyncAt: typeof parsed.lastSyncAt === 'string' ? parsed.lastSyncAt : null,
       deletedChartIds: sanitizeTombstones(parsed.deletedChartIds),
+      accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken : null,
+      tokenExpiresAt:
+        typeof parsed.tokenExpiresAt === 'number' && Number.isFinite(parsed.tokenExpiresAt)
+          ? parsed.tokenExpiresAt
+          : null,
     };
   } catch {
     return defaultSyncMeta();
