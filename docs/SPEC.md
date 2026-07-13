@@ -298,7 +298,35 @@ files, and the user can revoke at any time).
   States (syncing / synced / error / reconnect) get distinct, themed styling
   and accessible names. No blocking dialogs; errors are quiet.
 
-### 10.6 Compatibility
+### 10.6 Token persistence (v1.4.2)
+Refreshing the page used to re-run the load-time silent reconnect with only
+an in-memory access token, so it was always gone after a reload and Google
+had to be asked for a new one via `prompt: ''`. GIS answers that request with
+a **popup** whenever it cannot grant silently (Testing-mode consent screens,
+blocked third-party cookies, multiple signed-in Google accounts) — so every
+refresh could pop a sign-in window, even for an already-connected user.
+
+- Sync metadata (`visionsense.sync.v1`) gains `accessToken: string | null` and
+  `tokenExpiresAt: number | null` (epoch ms, the existing 60s safety margin
+  already applied) alongside the existing fields.
+- Token lookup order for a silent request (`prompt: ''`): (1) the in-memory
+  token if unexpired; (2) the token stored in sync metadata if unexpired —
+  hydrates the in-memory copy and returns it **without contacting GIS**; (3)
+  only then a silent `requestAccessToken` call. Any new token returned by GIS
+  (silent or consent) is written back to sync metadata immediately.
+- **No popup at page load, ever.** If sync is enabled but the stored token is
+  missing or expired, the load-time effect skips GIS entirely and sets status
+  to `reconnect`; the existing Reconnect button drives the consent flow from
+  a user gesture, which GIS is allowed to satisfy with UI.
+- A 401/403 from Drive, and an explicit disconnect, both clear the stored
+  token (disconnect also revokes it, in-memory or stored, best effort) so a
+  dead token is never reused.
+- Security tradeoff: the token is scoped to `drive.appdata` only (no access to
+  the rest of the user's Drive) and lives for at most about an hour. Storing
+  it in localStorage — rather than, say, an httpOnly cookie — is an accepted
+  tradeoff for an app with no backend of its own to hold it more safely.
+
+### 10.7 Compatibility
 No changes to the chart data model; `schemaVersion` stays 1. Sync metadata
 lives under its own key. Old blobs/exports unaffected. The one-time setup the
 owner must do in Google Cloud Console (create OAuth client ID, authorize the
