@@ -26,6 +26,7 @@ export function createAction(): Action {
     habit: false,
     established: false,
     completions: [],
+    cue: '',
   };
 }
 
@@ -102,6 +103,8 @@ export function createInitialState(): {
   schemaVersion: 1;
   charts: Chart[];
   activeChartId: string | null;
+  days: Record<string, never>;
+  reviews: Record<string, never>;
 } {
-  return { schemaVersion: 1, charts: [], activeChartId: null };
+  return { schemaVersion: 1, charts: [], activeChartId: null, days: {}, reviews: {} };
 }

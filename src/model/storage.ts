@@ -5,6 +5,7 @@
 // `visionsense.v1.backup` and fall back to a fresh empty state.
 
 import { createInitialState } from './factory';
+import { pruneDays, validateDays, validateReviews } from './journal';
 import {
   RULE_OF_8,
   type Action,
@@ -65,6 +66,8 @@ function validateAction(v: unknown): Action | null {
         (c): c is string => typeof c === 'string' && !Number.isNaN(new Date(c).getTime()),
       )
     : [];
+  // v1.4 if-then cue — same additive rule (SPEC 11.1): default when absent.
+  const cue = typeof v.cue === 'string' ? v.cue : '';
   return {
     id,
     text,
@@ -75,6 +78,7 @@ function validateAction(v: unknown): Action | null {
     habit,
     established,
     completions,
+    cue,
   };
 }
 
@@ -147,7 +151,12 @@ export function migrate(parsed: unknown): AppState | null {
     return null;
   }
 
-  return { schemaVersion: 1, charts, activeChartId };
+  // v1.4 journal (days/reviews) is additive + optional: default absent/wrong
+  // values to {} so pre-v1.4 blobs and old exports load unchanged (SPEC 11.5).
+  const days = validateDays(parsed.days);
+  const reviews = validateReviews(parsed.reviews);
+
+  return { schemaVersion: 1, charts, activeChartId, days, reviews };
 }
 
 // --- Load / Save --------------------------------------------------------------
@@ -198,7 +207,11 @@ export function saveState(
 ): void {
   if (!storage) return;
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(state));
+    // Prune stale day plans on write (SPEC 11.2). Only rebuild state when
+    // pruning actually removed something (pruneDays returns the same ref if not).
+    const prunedDays = pruneDays(state.days);
+    const toSave = prunedDays === state.days ? state : { ...state, days: prunedDays };
+    storage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch {
     // Best effort (e.g. QuotaExceeded). Persistence is not load-bearing for UX.
   }

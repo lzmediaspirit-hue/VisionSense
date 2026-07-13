@@ -3,6 +3,7 @@
 // here — only the small bookkeeping the sync controller needs, and the deletion
 // tombstones.
 
+import { validateDays, validateReviews } from '../model/journal';
 import { isObject, validateChart } from '../model/storage';
 import type { Chart } from '../model/types';
 import type { DrivePayload } from './drive';
@@ -104,10 +105,17 @@ export function parseDrivePayload(v: unknown): DrivePayload | null {
       if (chart) charts.push(chart); // skip individual bad charts rather than reject all
     }
   }
+  // v1.4 journal: default to empty records when absent (pre-v1.4 files) or when
+  // the nested object is missing/malformed (SPEC 11.4).
+  const journalRaw = isObject(v.journal) ? v.journal : {};
   return {
     schemaVersion: 1,
     charts,
     deletedChartIds: sanitizeTombstones(v.deletedChartIds),
     savedAt: typeof v.savedAt === 'string' ? v.savedAt : new Date(0).toISOString(),
+    journal: {
+      days: validateDays(journalRaw.days),
+      reviews: validateReviews(journalRaw.reviews),
+    },
   };
 }

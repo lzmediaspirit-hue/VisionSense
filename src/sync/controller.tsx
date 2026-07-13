@@ -17,7 +17,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { Chart } from '../model/types';
+import type { Chart, DayPlan, Review } from '../model/types';
 import { useStore } from '../state/store';
 import { effectiveClientId, isSyncConfigured } from './config';
 import {
@@ -31,6 +31,7 @@ import {
 } from './drive';
 import { requestAccessToken, revokeAccessToken, type AccessToken } from './gis';
 import { mergeSides } from './merge';
+import { mergeJournals } from './journalMerge';
 import {
   clearSyncMeta,
   loadSyncMeta,
@@ -63,12 +64,18 @@ const SyncContext = createContext<SyncView | null>(null);
 
 const PUSH_DEBOUNCE_MS = 2000;
 
-function makePayload(charts: Chart[], tombstones: Record<string, string>): DrivePayload {
+function makePayload(
+  charts: Chart[],
+  tombstones: Record<string, string>,
+  days: Record<string, DayPlan>,
+  reviews: Record<string, Review>,
+): DrivePayload {
   return {
     schemaVersion: 1,
     charts,
     deletedChartIds: tombstones,
     savedAt: new Date().toISOString(),
+    journal: { days, reviews },
   };
 }
 
@@ -83,7 +90,7 @@ function friendlyError(e: unknown): string {
 }
 
 function SyncController({ children }: { children: ReactNode }) {
-  const { state, replaceCharts } = useStore();
+  const { state, replaceCharts, replaceJournal } = useStore();
 
   const [status, setStatus] = useState<SyncStatus>(() =>
     loadSyncMeta().enabled ? 'reconnect' : 'disconnected',
@@ -96,9 +103,16 @@ function SyncController({ children }: { children: ReactNode }) {
   const tokenRef = useRef<AccessToken | null>(null);
   const chartsRef = useRef<Chart[]>(state.charts);
   chartsRef.current = state.charts;
-  // Charts we last pushed/merged — used to suppress a redundant debounced push
-  // right after a merge produced this exact array reference.
+  // Latest journal (day plans + reviews), tracked without re-triggering effects.
+  const daysRef = useRef<Record<string, DayPlan>>(state.days);
+  daysRef.current = state.days;
+  const reviewsRef = useRef<Record<string, Review>>(state.reviews);
+  reviewsRef.current = state.reviews;
+  // Charts/journal we last pushed/merged — used to suppress a redundant debounced
+  // push right after a merge produced these exact references.
   const syncedChartsRef = useRef<Chart[] | null>(null);
+  const syncedDaysRef = useRef<Record<string, DayPlan> | null>(null);
+  const syncedReviewsRef = useRef<Record<string, Review> | null>(null);
   const runningRef = useRef(false);
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clientId = effectiveClientId();
@@ -136,6 +150,8 @@ function SyncController({ children }: { children: ReactNode }) {
       let fileId = meta.fileId ?? (await findFile(token));
       let remoteCharts: Chart[] = [];
       let remoteTombstones: Record<string, string> = {};
+      let remoteDays: Record<string, DayPlan> = {};
+      let remoteReviews: Record<string, Review> = {};
       if (fileId) {
         try {
           const raw = await downloadFile(token, fileId);
@@ -143,6 +159,8 @@ function SyncController({ children }: { children: ReactNode }) {
           if (parsed) {
             remoteCharts = parsed.charts;
             remoteTombstones = parsed.deletedChartIds;
+            remoteDays = parsed.journal?.days ?? {};
+            remoteReviews = parsed.journal?.reviews ?? {};
           }
         } catch (e) {
           // A missing/renamed file (404) just means "no remote yet"; re-find once.
@@ -158,13 +176,25 @@ function SyncController({ children }: { children: ReactNode }) {
         { charts: chartsRef.current, tombstones: meta.deletedChartIds },
         { charts: remoteCharts, tombstones: remoteTombstones },
       );
+      const mergedJournal = mergeJournals(
+        { days: daysRef.current, reviews: reviewsRef.current },
+        { days: remoteDays, reviews: remoteReviews },
+      );
 
-      // Save merged locally and remember the reference so the debounced push
-      // triggered by this state change is suppressed.
+      // Save merged charts + journal locally and remember the references so the
+      // debounced push triggered by these state changes is suppressed.
       syncedChartsRef.current = merged.charts;
+      syncedDaysRef.current = mergedJournal.days;
+      syncedReviewsRef.current = mergedJournal.reviews;
       replaceCharts(merged.charts);
+      replaceJournal(mergedJournal.days, mergedJournal.reviews);
 
-      const payload = makePayload(merged.charts, merged.tombstones);
+      const payload = makePayload(
+        merged.charts,
+        merged.tombstones,
+        mergedJournal.days,
+        mergedJournal.reviews,
+      );
       if (fileId) await updateFile(token, fileId, payload);
       else fileId = await createFile(token, payload);
 
@@ -176,19 +206,23 @@ function SyncController({ children }: { children: ReactNode }) {
         deletedChartIds: merged.tombstones,
       });
     },
-    [acquireToken, persist, replaceCharts],
+    [acquireToken, persist, replaceCharts, replaceJournal],
   );
 
-  // Debounced push-only: upload current local charts + tombstones (SPEC 10.4).
+  // Debounced push-only: upload current local charts + tombstones + journal (SPEC 10.4).
   const push = useCallback(async () => {
     const token = await acquireToken('');
     const meta = loadSyncMeta();
     const charts = chartsRef.current;
-    const payload = makePayload(charts, meta.deletedChartIds);
+    const days = daysRef.current;
+    const reviews = reviewsRef.current;
+    const payload = makePayload(charts, meta.deletedChartIds, days, reviews);
     let fileId = meta.fileId;
     if (fileId) await updateFile(token, fileId, payload);
     else fileId = await createFile(token, payload);
     syncedChartsRef.current = charts;
+    syncedDaysRef.current = days;
+    syncedReviewsRef.current = reviews;
     persist({ fileId, lastSyncAt: payload.savedAt });
   }, [acquireToken, persist]);
 
@@ -241,6 +275,8 @@ function SyncController({ children }: { children: ReactNode }) {
     tokenRef.current = null;
     clearSyncMeta();
     syncedChartsRef.current = null;
+    syncedDaysRef.current = null;
+    syncedReviewsRef.current = null;
     setEmail('');
     setLastSyncAt(null);
     setError(null);
@@ -257,11 +293,18 @@ function SyncController({ children }: { children: ReactNode }) {
     void run(() => fullSync(''), { silentAuthOnly: true });
   }, [run, fullSync]);
 
-  // Debounced push on any local mutation while connected.
+  // Debounced push on any local mutation while connected (charts OR journal).
   useEffect(() => {
     if (!loadSyncMeta().enabled) return;
-    // Suppress the push caused by a merge writing back the same array we just synced.
-    if (state.charts === syncedChartsRef.current) return;
+    // Suppress the push caused by a merge writing back the same references we
+    // just synced: only skip when NOTHING changed relative to the last sync.
+    if (
+      state.charts === syncedChartsRef.current &&
+      state.days === syncedDaysRef.current &&
+      state.reviews === syncedReviewsRef.current
+    ) {
+      return;
+    }
     if (pushTimer.current) clearTimeout(pushTimer.current);
     pushTimer.current = setTimeout(() => {
       // Re-check at fire time: the user may have disconnected while we waited.
@@ -271,7 +314,7 @@ function SyncController({ children }: { children: ReactNode }) {
     return () => {
       if (pushTimer.current) clearTimeout(pushTimer.current);
     };
-  }, [state.charts, run, push]);
+  }, [state.charts, state.days, state.reviews, run, push]);
 
   const view = useMemo<SyncView>(
     () => ({

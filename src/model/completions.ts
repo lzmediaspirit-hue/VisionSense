@@ -180,14 +180,38 @@ export interface CompletionSummary {
  */
 export function completionSummary(chart: Chart, now: Date = new Date()): CompletionSummary {
   const dates = collectCompletions(chart);
+  return {
+    totalDone: chartProgress(chart).done,
+    total: TOTAL_ACTIONS,
+    currentStreak: streakFromDates(dates, now),
+  };
+}
+
+/**
+ * Consecutive local days with >= 1 event, counting back from `now`'s day. A day
+ * with no events today yields 0 (honest — the streak only lives while you keep
+ * going). Shared by the per-chart summary and the all-charts Today streak.
+ */
+export function streakFromDates(dates: Date[], now: Date = new Date()): number {
   const activeDays = new Set(dates.map(localDayKey));
-  let currentStreak = 0;
+  let streak = 0;
   for (let i = 0; ; i++) {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    if (activeDays.has(localDayKey(d))) currentStreak++;
+    if (activeDays.has(localDayKey(d))) streak++;
     else break;
   }
-  return { totalDone: chartProgress(chart).done, total: TOTAL_ACTIONS, currentStreak };
+  return streak;
+}
+
+/**
+ * Current streak of consecutive local days with >= 1 event across ALL charts
+ * (SPEC 11.2 — the Today view's streak). Events from every chart are pooled
+ * before counting.
+ */
+export function streakAcrossCharts(charts: readonly Chart[], now: Date = new Date()): number {
+  const dates: Date[] = [];
+  for (const chart of charts) dates.push(...collectCompletions(chart));
+  return streakFromDates(dates, now);
 }
 
 // --- Calendar (SPEC 8.4) -----------------------------------------------------

@@ -25,7 +25,7 @@ class MemStorage implements StorageLike {
 
 function sampleState(): AppState {
   const chart = createChart({ goal: 'Ship v1', now: () => '2022-01-01T00:00:00.000Z' });
-  return { schemaVersion: 1, charts: [chart], activeChartId: chart.id };
+  return { schemaVersion: 1, charts: [chart], activeChartId: chart.id, days: {}, reviews: {} };
 }
 
 describe('storage', () => {
@@ -177,6 +177,50 @@ describe('storage', () => {
       '2024-06-02T09:00:00.000Z',
     ]);
     expect(loaded.charts[0].pillars[0].actions[1].completions).toEqual([]);
+  });
+
+  // --- v1.4 backward compatibility (SPEC 11.5) --------------------------------
+
+  it('loads a pre-v1.4 blob (no cue, no days/reviews) with defaults', () => {
+    // Hand-build a schemaVersion 1 blob shaped like a v1.2/v1.3 blob: actions
+    // have no `cue`, and the top-level object has no `days`/`reviews` at all —
+    // mirroring what a returning user's localStorage (or an old Drive file)
+    // actually contains before this build.
+    const state = sampleState();
+    const legacy: Record<string, unknown> = {
+      schemaVersion: state.schemaVersion,
+      activeChartId: state.activeChartId,
+      charts: state.charts.map((c) => ({
+        ...c,
+        pillars: c.pillars.map((p) => ({
+          ...p,
+          actions: p.actions.map((a) => ({
+            id: a.id,
+            text: a.text,
+            status: a.status,
+            description: a.description,
+            reward: a.reward,
+            completedAt: a.completedAt,
+            habit: a.habit,
+            established: a.established,
+            completions: a.completions,
+            // no `cue` key at all
+          })),
+        })),
+      })),
+      // no `days` or `reviews` keys at all
+    };
+    storage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+
+    const loaded = loadState(storage);
+    expect(storage.getItem(BACKUP_KEY)).toBeNull(); // not treated as corrupt
+    expect(loaded.days).toEqual({});
+    expect(loaded.reviews).toEqual({});
+    for (const pillar of loaded.charts[0].pillars) {
+      for (const action of pillar.actions) {
+        expect(action.cue).toBe('');
+      }
+    }
   });
 
   it('preserves present v1.1 fields on load', () => {

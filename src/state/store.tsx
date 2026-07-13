@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { createChart, duplicateChart as duplicateChartOp, type CreateChartOptions } from '../model/factory';
 import { loadState, saveState } from '../model/storage';
-import type { AppState, Chart } from '../model/types';
+import type { AppState, Chart, DayPlan, Review } from '../model/types';
 import { recordChartDeletion } from '../sync/metadata';
 
 type StoreAction =
@@ -23,9 +23,13 @@ type StoreAction =
   | { type: 'OPEN_CHART'; id: string }
   | { type: 'CLOSE_CHART' }
   | { type: 'MUTATE_ACTIVE'; fn: (chart: Chart) => Chart }
+  | { type: 'MUTATE_CHART'; id: string; fn: (chart: Chart) => Chart }
   | { type: 'DUPLICATE_CHART'; id: string }
   | { type: 'DELETE_CHART'; id: string }
-  | { type: 'REPLACE_CHARTS'; charts: Chart[] };
+  | { type: 'REPLACE_CHARTS'; charts: Chart[] }
+  | { type: 'SET_DAY_PLAN'; key: string; plan: DayPlan }
+  | { type: 'SET_REVIEW'; key: string; review: Review }
+  | { type: 'REPLACE_JOURNAL'; days: Record<string, DayPlan>; reviews: Record<string, Review> };
 
 function reducer(state: AppState, action: StoreAction): AppState {
   switch (action.type) {
@@ -43,15 +47,10 @@ function reducer(state: AppState, action: StoreAction): AppState {
       return { ...state, activeChartId: null };
     case 'MUTATE_ACTIVE': {
       if (state.activeChartId === null) return state;
-      let changed = false;
-      const charts = state.charts.map((c) => {
-        if (c.id !== state.activeChartId) return c;
-        const next = action.fn(c);
-        if (next !== c) changed = true;
-        return next;
-      });
-      return changed ? { ...state, charts } : state;
+      return mutateChartById(state, state.activeChartId, action.fn);
     }
+    case 'MUTATE_CHART':
+      return mutateChartById(state, action.id, action.fn);
     case 'DUPLICATE_CHART': {
       const index = state.charts.findIndex((c) => c.id === action.id);
       if (index === -1) return state;
@@ -75,7 +74,29 @@ function reducer(state: AppState, action: StoreAction): AppState {
           : null;
       return { ...state, charts: action.charts, activeChartId };
     }
+    case 'SET_DAY_PLAN':
+      return { ...state, days: { ...state.days, [action.key]: action.plan } };
+    case 'SET_REVIEW':
+      return { ...state, reviews: { ...state.reviews, [action.key]: action.review } };
+    case 'REPLACE_JOURNAL':
+      return { ...state, days: action.days, reviews: action.reviews };
   }
+}
+
+/** Shared per-id chart mutation: returns the same state ref when nothing changed. */
+function mutateChartById(
+  state: AppState,
+  id: string,
+  fn: (chart: Chart) => Chart,
+): AppState {
+  let changed = false;
+  const charts = state.charts.map((c) => {
+    if (c.id !== id) return c;
+    const next = fn(c);
+    if (next !== c) changed = true;
+    return next;
+  });
+  return changed ? { ...state, charts } : state;
 }
 
 interface Store {
@@ -87,10 +108,18 @@ interface Store {
   openChart: (id: string) => void;
   closeChart: () => void;
   mutateActive: (fn: (chart: Chart) => Chart) => void;
+  /** Mutate any chart by id (used by the Today view to complete cross-chart actions). */
+  mutateChart: (id: string, fn: (chart: Chart) => Chart) => void;
   duplicateChart: (id: string) => void;
   deleteChart: (id: string) => void;
   /** Replace the entire chart list (used by the sync controller after a merge). */
   replaceCharts: (charts: Chart[]) => void;
+  /** Set a day's plan (v1.4 Today view). */
+  setDayPlan: (key: string, plan: DayPlan) => void;
+  /** Set a weekly review (v1.4). */
+  setReview: (key: string, review: Review) => void;
+  /** Replace the whole journal (used by the sync controller after a merge). */
+  replaceJournal: (days: Record<string, DayPlan>, reviews: Record<string, Review>) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -129,6 +158,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (fn: (chart: Chart) => Chart) => dispatch({ type: 'MUTATE_ACTIVE', fn }),
     [],
   );
+  const mutateChart = useCallback(
+    (id: string, fn: (chart: Chart) => Chart) => dispatch({ type: 'MUTATE_CHART', id, fn }),
+    [],
+  );
+  const setDayPlan = useCallback(
+    (key: string, plan: DayPlan) => dispatch({ type: 'SET_DAY_PLAN', key, plan }),
+    [],
+  );
+  const setReview = useCallback(
+    (key: string, review: Review) => dispatch({ type: 'SET_REVIEW', key, review }),
+    [],
+  );
+  const replaceJournal = useCallback(
+    (days: Record<string, DayPlan>, reviews: Record<string, Review>) =>
+      dispatch({ type: 'REPLACE_JOURNAL', days, reviews }),
+    [],
+  );
   const duplicateChart = useCallback(
     (id: string) => dispatch({ type: 'DUPLICATE_CHART', id }),
     [],
@@ -158,9 +204,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       openChart,
       closeChart,
       mutateActive,
+      mutateChart,
       duplicateChart,
       deleteChart,
       replaceCharts,
+      setDayPlan,
+      setReview,
+      replaceJournal,
     }),
     [
       state,
@@ -170,9 +220,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       openChart,
       closeChart,
       mutateActive,
+      mutateChart,
       duplicateChart,
       deleteChart,
       replaceCharts,
+      setDayPlan,
+      setReview,
+      replaceJournal,
     ],
   );
 
