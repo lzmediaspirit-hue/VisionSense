@@ -3,8 +3,8 @@
 // review "due" signal.
 
 import { describe, expect, it } from 'vitest';
-import { localDayKey } from './completions';
-import { createAction } from './factory';
+import { localDayKey, streakAcrossCharts } from './completions';
+import { createAction, createChart } from './factory';
 import {
   DAY_MAX_AGE_DAYS,
   isoWeekKey,
@@ -18,8 +18,17 @@ import {
   validateReview,
   validateReviews,
   weekCompletions,
+  weekEvidence,
 } from './journal';
-import type { Action, DayPlan, Review } from './types';
+import {
+  setActionCadence,
+  setActionEstablished,
+  setActionHabit,
+  setActionStatus,
+  setActionText,
+  toggleHabitToday,
+} from './operations';
+import type { Action, Chart, DayPlan, Review } from './types';
 
 describe('validateDayPlan / validateDays', () => {
   it('defaults every field on a bare object', () => {
@@ -264,5 +273,71 @@ describe('isReviewDue', () => {
     const twoDaysAgo = new Date(NOW.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
     const reviews = { '2026-W28': review(twoDaysAgo) };
     expect(isReviewDue(reviews, NOW)).toBe(false);
+  });
+});
+
+describe('weekEvidence (v1.9)', () => {
+  const NOW = new Date(2026, 6, 13); // Monday, ISO week 2026-W29
+
+  it('a daily habit (weeklyTarget 0) gets target 7', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Meditate');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = toggleHabitToday(chart, 0, 0, () => new Date(2026, 6, 13, 8, 0).toISOString());
+    const evidence = weekEvidence([chart], NOW);
+    expect(evidence.habits).toEqual([{ name: 'Meditate', days: 1, target: 7 }]);
+  });
+
+  it('a weekly-cadence habit gets its own weeklyTarget', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Gym');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = setActionCadence(chart, 0, 0, 3);
+    const evidence = weekEvidence([chart], NOW);
+    expect(evidence.habits).toEqual([{ name: 'Gym', days: 0, target: 3 }]);
+  });
+
+  it('excludes completions from other ISO weeks when counting a habit\'s days', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Read');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = toggleHabitToday(chart, 0, 0, () => new Date(2026, 6, 13, 8, 0).toISOString()); // this week (Mon)
+    chart = toggleHabitToday(chart, 0, 0, () => new Date(2026, 6, 6, 8, 0).toISOString()); // last week (Mon)
+    const evidence = weekEvidence([chart], NOW);
+    expect(evidence.habits).toEqual([{ name: 'Read', days: 1, target: 7 }]);
+  });
+
+  it('tasksDone counts only non-habit tasks completed within the current ISO week', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Ship v1');
+    chart = setActionStatus(chart, 0, 0, 'done', () => new Date(2026, 6, 14, 9, 0).toISOString()); // this week (Tue)
+    chart = setActionText(chart, 0, 1, 'Old task');
+    chart = setActionStatus(chart, 0, 1, 'done', () => new Date(2026, 5, 1, 9, 0).toISOString()); // a different week
+    const evidence = weekEvidence([chart], NOW);
+    expect(evidence.tasksDone).toBe(1);
+  });
+
+  it('excludes established and unfilled habits from the habits list', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Established habit');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = setActionEstablished(chart, 0, 0, true);
+    chart = setActionHabit(chart, 0, 1, true); // unfilled: text is still ''
+    const evidence = weekEvidence([chart], NOW);
+    expect(evidence.habits).toEqual([]);
+  });
+
+  it('an empty charts array yields empty habits and zero tasksDone', () => {
+    expect(weekEvidence([], NOW)).toEqual({ habits: [], tasksDone: 0, streak: 0 });
+  });
+
+  it('a chart with no filled actions yields empty habits and zero tasksDone', () => {
+    const chart: Chart = createChart();
+    const evidence = weekEvidence([chart], NOW);
+    expect(evidence.habits).toEqual([]);
+    expect(evidence.tasksDone).toBe(0);
+  });
+
+  it('streak reuses streakAcrossCharts', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Meditate');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = toggleHabitToday(chart, 0, 0, () => NOW.toISOString());
+    const evidence = weekEvidence([chart], NOW);
+    expect(evidence.streak).toBe(streakAcrossCharts([chart], NOW));
   });
 });

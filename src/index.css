@@ -1911,7 +1911,36 @@ select.field__input {
 }
 .mit__cue {
   font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* Pillar grouping (v1.9, SPEC 16): the Today habit lists group under a
+ * chart eyebrow (only shown with more than one chart) and a pillar
+ * sub-header, instead of repeating "chart · pillar" on every row. */
+.today__groups {
+  display: grid;
+}
+.today__chart-group + .today__chart-group {
+  margin-top: 1.1rem;
+}
+.today__chart-eyebrow {
+  font-size: 0.62rem;
   color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.5rem;
+}
+.today__pillar-group + .today__pillar-group {
+  margin-top: 0.85rem;
+}
+/* Copied from .picker__pillar-name (v1.4) rather than shared, since the
+ * picker dialog is a different component context (SPEC 16). */
+.today__pillar-name {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
 }
 .mit__week {
   flex: 0 0 auto;
@@ -2055,6 +2084,41 @@ select.field__input {
   font-size: 0.88rem;
   line-height: 1.55;
   margin: 0 0 1.1rem;
+}
+
+/* Evidence strip (v1.9, SPEC 16): what actually happened this week, shown
+ * above the reflection prompts so there's something concrete to write
+ * against. */
+.review__evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  margin: 0 0 1.1rem;
+}
+.review__evidence-intro {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+/* Values copied from .mit__week (v1.5) rather than shared, since that class
+ * is a flex-child pill scoped to the Today view's .mit row. */
+.review__chip {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
+}
+.review__chip-name {
+  display: inline-block;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 .review__section {
   margin-bottom: 2rem;

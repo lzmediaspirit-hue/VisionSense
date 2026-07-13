@@ -778,3 +778,79 @@ unlabeled 8px dot — all below WCAG 2.2's 24px minimum target size.
   `data-status` attributes, or button labels changed — layout and visual
   weight only, verified by an automated pass that these strings and all
   buttons remain intact and clickable.
+
+## 16. v1.9 (locked): the loop, closed
+
+A third design-review pass, closing the plan → do → review loop that 11.2/
+11.3 opened: Today told you what to do but buried the if-then cue and
+repeated the chart name on every row; the weekly review's "What went well?"
+had nothing to reflect against even though the app already had all the
+data. **Presentation + one pure helper**: `schemaVersion` stays `1`, no
+`Chart`/`Action`/`DayPlan`/`Review` shape changes, no new reducer actions.
+
+### 16.1 Today: group by pillar, promote the cue
+`TodayView.tsx`'s Daily-habits and Weekly-habits lists no longer render one
+flat `.mit-list` with every row repeating "«chart title» · «pillar»" in
+`.mit__context`. Rows are grouped (in a `useMemo`, from the existing
+`habitRows`, by chart id then pillar index, preserving encounter order):
+under each chart, a small eyebrow (`.today__chart-eyebrow`) names the chart
+— but ONLY when the user has more than one chart, since with a single chart
+it would just repeat the app's only goal on every screen; under each
+chart's pillar, a muted uppercase sub-header (`.today__pillar-name`, visual
+values copied from `.picker__pillar-name` rather than sharing the class,
+since the picker dialog is a different component context) fronts that
+pillar's `.mit-list`. Habit rows drop the per-row `.mit__context` line
+entirely — the grouping now carries chart/pillar. The if-then cue
+(`.mit__cue`) moves up to be the row's second line, directly under
+`.mit__text`, and changes color from `--text-faint` to `--text-muted` —
+promoted from the faintest text on the row to the thing a reader's eye
+actually lands on, since the if-then cue is the method's actual mechanism
+("after breakfast, at the park"), not a footnote. MIT ("Top 3 for today")
+rows keep their `.mit__context` line (there's no pillar grouping to carry it
+there) but slim it to `{multi ? `${chartTitle} · ` : ''}{pillarName}`, and
+get the same cue promotion, ordered text → cue → context. The MIT picker
+dialog, its grouping, and its own `.picker__pillar-name` are untouched.
+
+### 16.2 Weekly review: an evidence strip
+`WeeklyReview.tsx` renders an evidence strip above the four prompts — "This
+week:" followed by wrapping chips (`.review__evidence`) — whenever there's
+anything to show. A pure helper, `weekEvidence(charts, now)` in
+`src/model/journal.ts` (the file that already owns `isoWeekKey` /
+`weekCompletions`), computes:
+```ts
+interface WeekEvidence {
+  habits: Array<{ name: string; days: number; target: number }>;
+  tasksDone: number;
+  streak: number;
+}
+```
+`habits` is every filled, non-established habit across all charts in
+encounter order, with `days = weekCompletions(action, now)` and
+`target = weeklyTarget >= 1 ? weeklyTarget : 7` (a daily habit's target is
+the 7 days in the week). `tasksDone` counts non-habit actions with
+`status === 'done'` and a `completedAt` that parses into `now`'s ISO week.
+`streak` reuses `streakAcrossCharts` (SPEC 11.2) so the review echoes the
+same number Today shows. One chip per habit reads `{days} / {target}
+{name}` (name capped at ~18ch with an ellipsis so a long action text can't
+blow out the row); beyond 8 habits the rest collapse into a single "+N
+more" chip. A `{tasksDone} action(s) done` chip and a `{streak}-day streak`
+chip follow, each only rendered when > 0. Chip visuals
+(`.review__chip`) copy `.mit__week`'s CSS values rather than sharing the
+class, since `.mit__week` is a flex-child pill scoped to the Today view's
+`.mit` row. The strip is purely informational — `aria-label="This week's
+evidence"` on the container, chips are plain `<span>`s, nothing is
+interactive. The four textareas, ISO-week save behavior, past-reviews list,
+and dashboard due-badge logic are unchanged.
+
+### 16.3 Compatibility & quality
+Additive-only: `weekEvidence` is a new pure export, unit-tested in
+`journal.test.ts` (daily-habit target 7, weekly-habit target N, completions
+outside the current ISO week excluded, `tasksDone` counts only this week's
+completions, established/unfilled habits excluded, empty charts yield
+empty evidence). The "Daily habits" / "Weekly habits" headings and their
+`aria-labelledby` sections, `.mit-list` / `.mit` / `.mit__check` /
+`.mit__text` / `.mit__cue` / `.mit__week` semantics, `.mit.is-done`, every
+existing aria-label string (`Did it today: "X"`, `Undo today for "X"`,
+`Complete "X"`, `Undo "X"`, "Today view", "Pick today's top 3", "Weekly
+review", "Back to your charts"), and the MIT picker dialog are all
+unchanged. Mobile-first at 375px, no horizontal scroll.
