@@ -2,8 +2,9 @@
 // Pure, unit-tested helpers for validation-with-defaults, day pruning, ISO-week
 // keying, the MIT cap, and the weekly-review "due" signal. No I/O, no React.
 
-import { localDayKey } from './completions';
-import type { Action, DayPlan, Review } from './types';
+import { localDayKey, streakAcrossCharts } from './completions';
+import { isActionFilled } from './progress';
+import type { Action, Chart, DayPlan, Review } from './types';
 
 /** Structural cap on the number of MITs ("top 3 for today"). */
 export const MAX_MITS = 3;
@@ -179,4 +180,46 @@ export function isReviewDue(reviews: Record<string, Review>, now: Date = new Dat
   if (times.length === 0) return true;
   const newest = Math.max(...times);
   return now.getTime() - newest >= WEEK_MS;
+}
+
+// --- Weekly evidence (v1.9, SPEC 16) -----------------------------------------
+
+/** The current week's evidence for the weekly-review screen (SPEC 16). */
+export interface WeekEvidence {
+  /** Every filled, non-established habit across all charts, in encounter order. */
+  habits: Array<{ name: string; days: number; target: number }>;
+  /** Non-habit tasks completed within `now`'s ISO week. */
+  tasksDone: number;
+  /** Cross-chart streak (SPEC 11.2), reused so the review echoes the Today view. */
+  streak: number;
+}
+
+/**
+ * Gather what actually happened this ISO week, so the weekly-review prompts
+ * have something concrete to reflect against (SPEC 16). A daily habit's
+ * `target` is 7 (days in the week); a weekly-cadence habit's target is its own
+ * `weeklyTarget`. Purely derived — no new state.
+ */
+export function weekEvidence(charts: readonly Chart[], now: Date = new Date()): WeekEvidence {
+  const habits: WeekEvidence['habits'] = [];
+  let tasksDone = 0;
+  const wk = isoWeekKey(now);
+  for (const chart of charts) {
+    for (const pillar of chart.pillars) {
+      for (const action of pillar.actions) {
+        if (action.habit) {
+          if (action.established || !isActionFilled(action)) continue;
+          habits.push({
+            name: action.text.trim(),
+            days: weekCompletions(action, now),
+            target: action.weeklyTarget >= 1 ? action.weeklyTarget : 7,
+          });
+        } else if (action.status === 'done' && action.completedAt) {
+          const d = new Date(action.completedAt);
+          if (!Number.isNaN(d.getTime()) && isoWeekKey(d) === wk) tasksDone++;
+        }
+      }
+    }
+  }
+  return { habits, tasksDone, streak: streakAcrossCharts(charts, now) };
 }

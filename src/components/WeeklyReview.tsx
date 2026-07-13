@@ -3,9 +3,12 @@
 // blocking dialogs, no guilt copy — this is a nudge, not an obligation.
 
 import { useCallback, useMemo } from 'react';
-import { isoWeekKey, isoWeekLabel } from '../model/journal';
+import { isoWeekKey, isoWeekLabel, weekEvidence } from '../model/journal';
 import type { Review } from '../model/types';
 import { useStore } from '../state/store';
+
+/** Habit chips beyond this count collapse into a single "+N more" chip. */
+const MAX_HABIT_CHIPS = 8;
 
 interface WeeklyReviewProps {
   onClose: () => void;
@@ -25,6 +28,13 @@ export function WeeklyReview({ onClose }: WeeklyReviewProps) {
   const { state, setReview } = useStore();
   const weekKey = useMemo(() => isoWeekKey(new Date()), []);
   const current = state.reviews[weekKey] ?? emptyReview();
+
+  // What actually happened this week, so "What went well?" has something to
+  // reflect against (v1.9, SPEC 16). Purely informational — no new state.
+  const evidence = useMemo(() => weekEvidence(state.charts, new Date()), [state.charts]);
+  const shownHabits = evidence.habits.slice(0, MAX_HABIT_CHIPS);
+  const extraHabits = evidence.habits.length - shownHabits.length;
+  const hasEvidence = evidence.habits.length > 0 || evidence.tasksDone > 0;
 
   const save = useCallback(
     (patch: Partial<ReviewText>) => {
@@ -71,6 +81,26 @@ export function WeeklyReview({ onClose }: WeeklyReviewProps) {
           A written weekly review is the highest-leverage habit in this method. All four prompts
           are optional — a few honest words are enough.
         </p>
+
+        {hasEvidence && (
+          <div className="review__evidence" aria-label="This week's evidence">
+            <span className="review__evidence-intro">This week:</span>
+            {shownHabits.map((h, i) => (
+              <span className="review__chip" key={i}>
+                {h.days} / {h.target} <span className="review__chip-name">{h.name}</span>
+              </span>
+            ))}
+            {extraHabits > 0 && <span className="review__chip">+{extraHabits} more</span>}
+            {evidence.tasksDone > 0 && (
+              <span className="review__chip">
+                {evidence.tasksDone} action{evidence.tasksDone === 1 ? '' : 's'} done
+              </span>
+            )}
+            {evidence.streak > 0 && (
+              <span className="review__chip">{evidence.streak}-day streak</span>
+            )}
+          </div>
+        )}
 
         <label className="field">
           <span className="field__label">What went well?</span>
