@@ -3,13 +3,16 @@
 // and JSON import. Export (JSON/PNG) and print live in ChartScreen's header
 // since they act on the chart currently open there.
 
-import { useCallback, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { parseChartImport } from '../model/exportImport';
 import { isReviewDue } from '../model/journal';
+import { getFlag, HELP_SEEN_KEY, setFlag } from '../model/onboarding';
 import { chartProgress } from '../model/progress';
 import { useStore } from '../state/store';
+import { EXAMPLE_TEMPLATE_ID } from '../templates/example';
 import type { Template } from '../templates/templates';
 import { ConfirmDialog } from './ConfirmDialog';
+import { HowItWorksDialog } from './HowItWorksDialog';
 import { SyncWidget } from './SyncWidget';
 import { TemplatePicker } from './TemplatePicker';
 
@@ -35,7 +38,31 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-show "How it works" exactly once, ever, and ONLY for a genuine
+  // first-run user (v1.6, SPEC 13). A ref guard (not state) so this only ever
+  // fires on the initial mount, never again on re-renders — mirrors the sync
+  // controller's `didInit` pattern. First run is detected by the presence of
+  // the seeded example chart: existing users (who upgraded into this version
+  // and already have their own charts) are never seeded, so the dialog must
+  // not pop for them even though they've never set HELP_SEEN_KEY.
+  const didAutoShowHelp = useRef(false);
+  useEffect(() => {
+    if (didAutoShowHelp.current) return;
+    didAutoShowHelp.current = true;
+    const isFirstRun = charts.some((c) => c.templateId === EXAMPLE_TEMPLATE_ID);
+    if (isFirstRun && !getFlag(HELP_SEEN_KEY)) {
+      setHelpOpen(true);
+      setFlag(HELP_SEEN_KEY);
+    }
+  }, [charts]);
+
+  const onOpenExample = useCallback(() => {
+    const example = charts.find((c) => c.templateId === EXAMPLE_TEMPLATE_ID);
+    if (example) openChart(example.id);
+  }, [charts, openChart]);
 
   const onPickTemplate = useCallback(
     (template: Template) => {
@@ -87,6 +114,14 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
           </div>
         </div>
         <div className="dashboard__header-actions">
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setHelpOpen(true)}
+            aria-label="How it works"
+          >
+            ?
+          </button>
           <button type="button" className="btn btn--ghost" onClick={onImportClick}>
             Import JSON
           </button>
@@ -162,7 +197,12 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
                       aria-hidden="true"
                     />
                     <span className="chart-card__body">
-                      <span className="chart-card__title">{title}</span>
+                      <span className="chart-card__title-row">
+                        <span className="chart-card__title">{title}</span>
+                        {chart.templateId === EXAMPLE_TEMPLATE_ID && (
+                          <span className="chart-card__badge">Example</span>
+                        )}
+                      </span>
                       <span className="chart-card__meta">
                         {filled}/{total} filled · {done} done
                       </span>
@@ -219,6 +259,12 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
           setConfirmDeleteId(null);
         }}
         onCancel={() => setConfirmDeleteId(null)}
+      />
+
+      <HowItWorksDialog
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        onOpenExample={onOpenExample}
       />
     </div>
   );

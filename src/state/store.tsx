@@ -14,9 +14,49 @@ import {
   type ReactNode,
 } from 'react';
 import { createChart, duplicateChart as duplicateChartOp, type CreateChartOptions } from '../model/factory';
+import { EXAMPLE_SEEDED_KEY, getFlag, setFlag } from '../model/onboarding';
 import { loadState, saveState } from '../model/storage';
 import type { AppState, Chart, DayPlan, Review } from '../model/types';
 import { recordChartDeletion } from '../sync/metadata';
+import { buildExampleChart } from '../templates/example';
+
+/**
+ * First-run seed (v1.6, SPEC 13): a brand-new device with zero charts gets one
+ * fully-filled example chart, so it's never a blank slate. Guarded by
+ * `EXAMPLE_SEEDED_KEY` so this fires AT MOST ONCE per device, ever:
+ *  - A user who already has charts (including one just pulled in by sync)
+ *    is left completely unchanged, flag or no flag.
+ *  - Deleting the example afterwards does not bring it back — the flag is
+ *    set the moment this seed runs, not tied to the example chart's presence.
+ * Exported for unit testing; not part of the public Store API.
+ */
+export function seedFirstRun(state: AppState): AppState {
+  if (state.charts.length !== 0 || getFlag(EXAMPLE_SEEDED_KEY)) return state;
+  setFlag(EXAMPLE_SEEDED_KEY);
+  return { ...state, charts: [buildExampleChart()] };
+}
+
+// Module-scoped (not component-scoped) memoization of the page's one-time
+// first-run seed decision. React 18 StrictMode in development doesn't just
+// double-invoke a lazy-init function in place — on initial mount it mounts,
+// unmounts (tearing down ALL hook state, refs included, to help find
+// un-cleaned-up effects), then mounts again. A `useRef` guard inside
+// StoreProvider can't survive that teardown between the two mounts, so a
+// naive `useReducer(reducer, undefined, () => seedFirstRun(loadState()))`
+// would seed + flip EXAMPLE_SEEDED_KEY on the first (torn-down) mount, then
+// see the flag already set and skip seeding on the second (kept) mount — the
+// example chart would silently never appear. Module scope survives that
+// teardown (it's only reset by a real page reload), so `initialAppState()`
+// caches the computed state the first time either mount calls it and hands
+// the SAME object to both, making seedFirstRun's side effect fire exactly
+// once per page load either way.
+let firstRunInitialState: AppState | undefined;
+function initialAppState(): AppState {
+  if (firstRunInitialState === undefined) {
+    firstRunInitialState = seedFirstRun(loadState());
+  }
+  return firstRunInitialState;
+}
 
 type StoreAction =
   | { type: 'CREATE_CHART'; chart: Chart }
@@ -25,6 +65,7 @@ type StoreAction =
   | { type: 'MUTATE_ACTIVE'; fn: (chart: Chart) => Chart }
   | { type: 'MUTATE_CHART'; id: string; fn: (chart: Chart) => Chart }
   | { type: 'DUPLICATE_CHART'; id: string }
+  | { type: 'ADOPT_EXAMPLE'; id: string }
   | { type: 'DELETE_CHART'; id: string }
   | { type: 'REPLACE_CHARTS'; charts: Chart[] }
   | { type: 'SET_DAY_PLAN'; key: string; plan: DayPlan }
@@ -58,6 +99,18 @@ function reducer(state: AppState, action: StoreAction): AppState {
       const charts = state.charts.slice();
       charts.splice(index + 1, 0, copy);
       return { ...state, charts };
+    }
+    case 'ADOPT_EXAMPLE': {
+      // Duplicate + open, like DUPLICATE_CHART, but the copy is a REAL chart
+      // now: clear the example sentinel so it never carries the badge/banner
+      // (SPEC 13). The seeded example itself is untouched, so it stays
+      // available to duplicate again later.
+      const index = state.charts.findIndex((c) => c.id === action.id);
+      if (index === -1) return state;
+      const copy = { ...duplicateChartOp(state.charts[index]), templateId: null };
+      const charts = state.charts.slice();
+      charts.splice(index + 1, 0, copy);
+      return { ...state, charts, activeChartId: copy.id };
     }
     case 'DELETE_CHART': {
       if (!state.charts.some((c) => c.id === action.id)) return state;
@@ -111,6 +164,8 @@ interface Store {
   /** Mutate any chart by id (used by the Today view to complete cross-chart actions). */
   mutateChart: (id: string, fn: (chart: Chart) => Chart) => void;
   duplicateChart: (id: string) => void;
+  /** Duplicate the example chart into a real, editable one and open it (SPEC 13). */
+  adoptExample: (id: string) => void;
   deleteChart: (id: string) => void;
   /** Replace the entire chart list (used by the sync controller after a merge). */
   replaceCharts: (charts: Chart[]) => void;
@@ -127,7 +182,7 @@ const StoreContext = createContext<Store | null>(null);
 const SAVE_DEBOUNCE_MS = 250;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, () => loadState());
+  const [state, dispatch] = useReducer(reducer, undefined, initialAppState);
 
   // Debounced persistence: every mutation eventually writes through.
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -179,6 +234,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (id: string) => dispatch({ type: 'DUPLICATE_CHART', id }),
     [],
   );
+  const adoptExample = useCallback(
+    (id: string) => dispatch({ type: 'ADOPT_EXAMPLE', id }),
+    [],
+  );
   const deleteChart = useCallback((id: string) => {
     // Record a tombstone first (only takes effect when sync is enabled) so the
     // deletion propagates instead of being resurrected by a stale remote copy.
@@ -206,6 +265,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutateActive,
       mutateChart,
       duplicateChart,
+      adoptExample,
       deleteChart,
       replaceCharts,
       setDayPlan,
@@ -222,6 +282,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutateActive,
       mutateChart,
       duplicateChart,
+      adoptExample,
       deleteChart,
       replaceCharts,
       setDayPlan,
