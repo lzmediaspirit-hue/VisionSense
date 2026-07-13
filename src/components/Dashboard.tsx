@@ -41,19 +41,23 @@ export function Dashboard({ onOpenToday, onOpenReview }: DashboardProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-show "How it works" exactly once, ever, on first run (v1.6, SPEC
-  // 13). A ref guard (not state) so this only ever fires on the initial
-  // mount, never again on re-renders — mirrors the sync controller's
-  // `didInit` pattern.
+  // Auto-show "How it works" exactly once, ever, and ONLY for a genuine
+  // first-run user (v1.6, SPEC 13). A ref guard (not state) so this only ever
+  // fires on the initial mount, never again on re-renders — mirrors the sync
+  // controller's `didInit` pattern. First run is detected by the presence of
+  // the seeded example chart: existing users (who upgraded into this version
+  // and already have their own charts) are never seeded, so the dialog must
+  // not pop for them even though they've never set HELP_SEEN_KEY.
   const didAutoShowHelp = useRef(false);
   useEffect(() => {
     if (didAutoShowHelp.current) return;
     didAutoShowHelp.current = true;
-    if (!getFlag(HELP_SEEN_KEY)) {
+    const isFirstRun = charts.some((c) => c.templateId === EXAMPLE_TEMPLATE_ID);
+    if (isFirstRun && !getFlag(HELP_SEEN_KEY)) {
       setHelpOpen(true);
       setFlag(HELP_SEEN_KEY);
     }
-  }, []);
+  }, [charts]);
 
   const onOpenExample = useCallback(() => {
     const example = charts.find((c) => c.templateId === EXAMPLE_TEMPLATE_ID);
