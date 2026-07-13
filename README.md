@@ -17,6 +17,13 @@ the goal-attainment literature (see `docs/SPEC.md` §11 for citations).
 
 ## Features
 
+### Getting started
+- **First-run onboarding** — a brand-new device seeds one fully-filled
+  example chart ("Finish my first marathon", badged and deletable) plus a
+  one-time "How it works" guide, so you never start from a blank grid with
+  no idea what goes where. Both are purely first-run: existing charts and
+  returning users are never touched.
+
 ### The chart
 - **9×9 grid** with the pillar names mirrored between the center "hub" block and
   each pillar's own block — a single source of truth, editable from either place

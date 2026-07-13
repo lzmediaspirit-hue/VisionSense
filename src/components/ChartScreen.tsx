@@ -17,9 +17,11 @@ import {
   toggleHabitToday,
 } from '../model/operations';
 import { isHabitCheckedToday } from '../model/completions';
+import { EXAMPLE_BANNER_HIDDEN_KEY, getFlag, setFlag } from '../model/onboarding';
 import type { Chart, StoredStatus, ThemeId } from '../model/types';
 import { useIsCompact, usePrintMode } from '../hooks/useMediaQuery';
 import { useStore } from '../state/store';
+import { EXAMPLE_TEMPLATE_ID } from '../templates/example';
 import { ActionDetailDialog } from './ActionDetailDialog';
 import { BlockView } from './BlockView';
 import { Grid } from './Grid';
@@ -41,13 +43,17 @@ export function ChartScreen({
   /** Open the cross-chart Today view (v1.4, SPEC 11.2), reachable from the header. */
   onOpenToday: () => void;
 }) {
-  const { mutateActive, closeChart } = useStore();
+  const { mutateActive, closeChart, adoptExample } = useStore();
   const compact = useIsCompact();
   const printing = usePrintMode();
 
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const [progressOpen, setProgressOpen] = useState(false);
   const [toast, setToast] = useState<RewardToastData | null>(null);
+  // "This is an example" banner (v1.6, SPEC 13): dismissed for good via a
+  // localStorage flag, so re-opening the chart never brings it back.
+  const [bannerHidden, setBannerHidden] = useState(() => getFlag(EXAMPLE_BANNER_HIDDEN_KEY));
+  const isExample = chart.templateId === EXAMPLE_TEMPLATE_ID;
 
   const onCommitText = useCallback(
     (cell: GridCell, text: string) => {
@@ -207,6 +213,34 @@ export function ChartScreen({
           8 pillars, exactly — if you have 9, merge two. Actions should be measurable behaviours.
         </p>
       </header>
+
+      {isExample && !bannerHidden && (
+        <div className="example-banner" role="note">
+          <span className="example-banner__text">
+            This is an example chart — duplicate it to make it your own.
+          </span>
+          <div className="example-banner__actions">
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => adoptExample(chart.id)}
+            >
+              Duplicate &amp; edit
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost example-banner__dismiss"
+              onClick={() => {
+                setFlag(EXAMPLE_BANNER_HIDDEN_KEY);
+                setBannerHidden(true);
+              }}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="chart-main">
         {printing ? (

@@ -488,3 +488,79 @@ App lives at the repo root: `index.html`, `src/`, `package.json`, `docs/SPEC.md`
 (this file). `src/` split: `src/model/` (types, factories, migrations, storage —
 pure, tested), `src/state/` (React context/reducer), `src/components/`,
 `src/themes/`, `src/templates/`.
+
+## 13. v1.6 additions (locked): onboarding
+
+A new user used to land on an empty 9x9 grid with no worked example and no
+explanation of the method. This adds two purely additive, first-run-only
+onboarding surfaces: a fully-filled example chart, and a "How it works"
+guide. Neither changes `schemaVersion` (stays `1`), and neither affects an
+existing user who already has at least one chart.
+
+### 13.1 The example chart
+`src/templates/example.ts` builds one fully-filled Mandala chart — "Finish my
+first marathon" (8 pillars x 8 actions, a representative mix of plain tasks,
+daily habits, weekly-cadence habits, if-then cues, rewards, and in-progress /
+done statuses, plus a few live completions seeded relative to "today" so the
+demo never looks stale) — entirely from `createChart`/`createAction` spreads,
+so it always tracks the current `Action`/`Chart` shape.
+
+It carries a **fixed id** (`EXAMPLE_CHART_ID = 'example-marathon'`) and a
+**sentinel** stored in the chart's existing `templateId` field
+(`EXAMPLE_TEMPLATE_ID = 'example'`) — reusing the "provenance only" field
+with no schema change.
+
+**First-run seed** (`seedFirstRun`, `src/state/store.tsx`): wraps the
+reducer's lazy `useReducer` init. It seeds the example chart if and only if
+`state.charts.length === 0 && !getFlag(EXAMPLE_SEEDED_KEY)`, and immediately
+sets `EXAMPLE_SEEDED_KEY` (`visionsense.example.seeded` in localStorage) the
+moment it runs. Consequences:
+- A returning device, or one that syncs in any chart from another device,
+  is **never** seeded — the `charts.length === 0` check alone already
+  protects it, before the flag is even consulted.
+- Deleting the example chart afterwards does **not** bring it back — the
+  flag is set at seed time, not tied to the chart's continued presence.
+- The example chart is a normal `Chart`: it saves, exports, prints, and
+  **syncs like any other chart** (no special-casing anywhere in storage,
+  export/import, or the Drive sync/merge layers).
+
+**Badge + adopt-to-edit flow**: the dashboard chart card shows a small muted
+`chart-card__badge` ("Example") next to the title whenever
+`chart.templateId === EXAMPLE_TEMPLATE_ID`. Opening the example chart shows a
+slim dismissible banner above the grid ("This is an example chart —
+duplicate it to make it your own.") with a **"Duplicate & edit"** button.
+That button dispatches a new reducer action, `ADOPT_EXAMPLE`, which
+duplicates the chart (reusing `duplicateChart` from `model/factory.ts` for
+fresh ids/timestamps throughout), **clears the copy's `templateId` to
+`null`** (so the copy is a real, badge-free, bannerless chart), inserts it,
+and opens it. The original seeded example is untouched, so it can be
+duplicated again later. The banner's "×" dismiss hides it for good via
+`visionsense.example.bannerHidden` in localStorage (does not touch the
+badge, and does not delete the example).
+
+### 13.2 "How it works" dialog
+`src/components/HowItWorksDialog.tsx` is a native `<dialog>` modal (same
+`modal-overlay`/`modal`/Esc-and-backdrop-close pattern as `ConfirmDialog` and
+`TemplatePicker`) explaining the Rule of 8, the 3-step build flow, the
+habit/cue/reward loop, the Today/Weekly-review discipline layer, and where
+data lives. It is reachable from a "?" button in the dashboard header
+(before "Import JSON"), and is **auto-shown exactly once, ever**: on the
+Dashboard's first mount, a `useRef` guard (mirroring the sync controller's
+`didInit` pattern, so it never re-fires on a later re-render) checks
+`getFlag(HELP_SEEN_KEY)` (`visionsense.help.seen`); if unset, it opens the
+dialog and sets the flag immediately. A returning user (flag already set)
+never sees it auto-open again — they can still reach it any time via the "?"
+button. When the seeded example chart exists, the dialog's primary footer
+button ("Explore the example") opens it directly.
+
+### 13.3 Compatibility
+Additive-only, exactly like every prior version bump: `schemaVersion` stays
+`1`. `src/model/onboarding.ts` holds the three onboarding flag keys
+(`EXAMPLE_SEEDED_KEY`, `HELP_SEEN_KEY`, `EXAMPLE_BANNER_HIDDEN_KEY`) plus
+best-effort `getFlag`/`setFlag` helpers (typeof-guarded, try/catch, mirroring
+`sync/metadata.ts`'s localStorage style) — a disabled or missing
+localStorage just means the onboarding UI may be asked to show again, never
+a crash. Because seeding is gated purely on `charts.length === 0`, an
+existing user with any chart — including one who has never opened this
+version of the app before — is completely unaffected: no seeded chart, no
+auto-opened dialog, no new badge or banner anywhere in their data.

@@ -322,13 +322,35 @@ button {
   gap: 0.3rem;
   min-width: 0;
 }
+.chart-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
 .chart-card__title {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 1rem;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Example-chart badge (v1.6, SPEC 13) — small, muted, theme-agnostic. */
+.chart-card__badge {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  line-height: 1.4;
 }
 .chart-card__meta {
   font-size: 0.8rem;
@@ -463,6 +485,52 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 0.9rem;
+}
+
+/* --------------------------------------------- how-it-works dialog (v1.6) */
+.hiw {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.1rem;
+  align-items: flex-start;
+}
+.hiw__mini {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  width: 60px;
+  height: 60px;
+  margin-top: 0.15rem;
+}
+.hiw__cell {
+  display: block;
+  border-radius: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.hiw__cell--center {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.hiw__body {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.hiw__heading {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--text);
+  margin: 0.9rem 0 0.25rem;
+}
+.hiw__heading:first-child {
+  margin-top: 0;
+}
+.hiw__text {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
 }
 
 /* ---------------------------------------------- action detail dialog (7.1) */
@@ -936,6 +1004,35 @@ select.field__input {
 .chart-header__actions .btn {
   font-size: 0.78rem;
   padding: 0.4rem 0.75rem;
+}
+
+/* Example-chart banner (v1.6, SPEC 13) — slim, subtle, theme-agnostic. */
+.example-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0.6rem clamp(0.75rem, 3vw, 1.5rem) 0;
+  padding: 0.55rem 0.9rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.example-banner__text {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.example-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+.example-banner__dismiss {
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.2rem 0.5rem;
 }
 
 .progress-strip {
