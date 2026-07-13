@@ -340,17 +340,24 @@ function MitPicker({
   // centering/backdrop/Esc-to-close for free instead of a bespoke overlay.
   const ref = useRef<HTMLDialogElement>(null);
 
+  // Track onClose in a ref so the dialog effect runs exactly once on mount.
+  // Re-running it on parent re-renders (picking an item updates the day plan)
+  // would close/reopen the <dialog>, and the queued 'close' event would then
+  // hit the freshly attached listener and dismiss the picker after one pick.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    const handleClose = () => onClose();
+    const handleClose = () => onCloseRef.current();
     dialog.addEventListener('close', handleClose);
     dialog.showModal();
     return () => {
       dialog.removeEventListener('close', handleClose);
       if (dialog.open) dialog.close();
     };
-  }, [onClose]);
+  }, []);
 
   const candidates = useMemo(() => collectCandidates(charts), [charts]);
   const atCap = mits.length >= MAX_MITS;
