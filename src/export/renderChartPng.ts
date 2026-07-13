@@ -33,7 +33,7 @@ interface ThemeColors {
   text: string;
   textMuted: string;
   textFaint: string;
-  borderStrong: string;
+  gridBg: string;
   goalBgSolid: string;
   goalText: string;
   goalMuted: string;
@@ -70,7 +70,7 @@ function resolveThemeColors(themeId: string): ThemeColors {
     text: readVar(cs, '--text', '#1f2430'),
     textMuted: readVar(cs, '--text-muted', '#5b6270'),
     textFaint: readVar(cs, '--text-faint', '#aab0bd'),
-    borderStrong: readVar(cs, '--border-strong', '#cdd2dd'),
+    gridBg: readVar(cs, '--grid-bg', '#e6e8ee'),
     goalBgSolid: readVar(cs, '--goal-bg-solid', '#1c2438'),
     goalText: readVar(cs, '--goal-text', '#ffffff'),
     goalMuted: readVar(cs, '--goal-muted', '#b9c2d8'),
@@ -263,7 +263,7 @@ export function renderChartPng(chart: Chart): HTMLCanvasElement {
   // Grout: fill the whole grid area with the seam color, then paint cells on
   // top inset by their gap — the uncovered strip is the seam, matching the
   // live grid's block/cell borders.
-  ctx.fillStyle = colors.borderStrong;
+  ctx.fillStyle = colors.gridBg;
   ctx.fillRect(PAD, HEADER_H + PAD, gridSpan, gridSpan);
 
   const cells = buildGridCells(chart);

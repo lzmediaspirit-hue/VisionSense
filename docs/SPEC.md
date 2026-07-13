@@ -688,3 +688,93 @@ enough chrome that the export buttons wrapped to a second row on mobile.
   `title={cell.text}` when the cell is filled, so a desktop user can hover a
   clamped/truncated cell (long action text especially) to read the full
   value without opening the detail dialog.
+
+## 15. v1.8 (locked): structural polish
+
+A second design-review pass, again CSS-first with a handful of small
+component edits. **Presentation only**: `schemaVersion` stays `1`, no
+`Chart`/`Action` shape changes, no new reducer actions, no behavior change to
+any existing feature.
+
+### 15.1 Grid-seam color split from UI chrome borders
+The costume themes (stadium, marquee) painted `.grid`'s block gaps with
+`--border-strong` and `.block`'s cell gaps with `--border` — the same two
+tokens every card, input, dialog, and calendar hairline uses. Since those
+themes set `--border`/`--border-strong` to loud, saturated colors (marquee
+`--border: #4a1e28`), the costume leaked into every piece of chrome, not
+just the grid. Meanwhile each theme already defined a dedicated `--grid-bg`
+token that nothing read.
+- **`src/index.css`**: `.grid`, `.block--mobile`, and `.overview` now paint
+  with `var(--grid-bg)` instead of `var(--border-strong)`. `.block` uses
+  `color-mix(in srgb, var(--grid-bg) 45%, var(--surface))` — lighter than
+  the block-level seam, preserving the existing two-weight gap hierarchy
+  (block gaps read stronger than cell gaps within a block). `.block--pillar`
+  and `.block--mobile.block--pillar` mix `--cell-accent` with `--grid-bg`
+  instead of `--border`/`--border-strong`.
+- **`src/themes/themes.css`**: stadium and marquee's `--border`/
+  `--border-strong` are returned to quiet neutrals with a whisper of each
+  theme's temperature — stadium `--border: #d9e4dc; --border-strong:
+  #b9c9be;`, marquee `--border: #e4d9c6; --border-strong: #c9bba0;`. minimal
+  and campus were already neutral and are unchanged. The unused
+  `--fs-pillar` token is removed (grep-verified: only referenced inside a
+  code comment, never as an actual CSS value).
+- **`src/export/renderChartPng.ts`**: `ThemeColors` gains `gridBg` (reads
+  `--grid-bg`, falls back to `#e6e8ee`), replacing the now-unused
+  `borderStrong` field. The canvas "grout" fill (the full-grid background
+  painted before cells, whose uncovered strip reads as the seam) uses
+  `colors.gridBg` so the PNG export matches the live grid exactly.
+- Net effect: minimal/campus render near-identically to before (their
+  `--grid-bg` was already close to the old border colors). Stadium and
+  marquee keep their dramatic dark grid seams, but every other hairline —
+  cards, inputs, dialogs, the theme switcher — now reads as quiet, neutral
+  chrome instead of the costume color.
+
+### 15.2 Bigger touch targets + a legible due-count pill
+Three corner controls in the grid cells (`.cell__status`,
+`.cell__habit-check`, `.cell__expand`) were 20×20px, the Today check
+(`.mit__check`) was 26px, and the dashboard's review due-indicator was an
+unlabeled 8px dot — all below WCAG 2.2's 24px minimum target size.
+- **Cell corner controls**: visible size is unchanged (20px box, 12px
+  glyph) — each gets a `::before { content: ''; position: absolute; inset:
+  -6px; }`, expanding the clickable/tappable area to 32px without changing
+  how the cell looks. `.cell__habit-badge` is a non-interactive `<span>`
+  (`pointer-events: none`) and was left alone.
+- **Today check** (`.mit__check`): visible size goes 26px → 32px, plus the
+  same `-6px` inset `::before` trick for a ~44px effective target
+  (`.mit__check` gained `position: relative` since, unlike the cell
+  controls, it wasn't already a positioned element).
+- **Due-count pill** (`.due-badge` + `Dashboard.tsx`): the 8px dot is
+  replaced by a small pill reading "1" (`aria-hidden="true"`, the button's
+  existing `aria-label="Review (due)"` already carries the accessible
+  meaning). Restyled to `min-width: 15px; height: 15px; border-radius:
+  999px; font-size: 0.62rem; font-weight: 700; line-height: 15px;
+  text-align: center; color: #fff;` on the existing `--status-doing`
+  background and surface ring. The wider pill needed clearance from the
+  "Review" label it sits beside, so `.dashboard__cta-review:has(.due-badge)`
+  adds `padding-right: 1.4rem`.
+
+### 15.3 Dashboard: content first
+- **Mini-mandala thumbnails**: each chart card's flat 30px theme-swatch dot
+  is replaced by `ChartThumb` (`src/components/ChartThumb.tsx`), a live 3×3
+  render of the chart's actual state. It maps grid order the same way
+  `MiniMap` does (`CENTER_BLOCK`/`orderToPillarIndex` from `../model/grid`):
+  the center tile is the goal (`background: var(--goal-bg-solid)`), the 8
+  outer tiles are pillars, each colored via an inline `--tile-accent:
+  pillar.color` custom property (same pattern `MiniMap` uses) and filled
+  bottom-up with `pillarProgress(pillar)`'s done/filled ratio. An empty
+  pillar (`filled === 0`) gets `opacity: 0.35`. The now-unreferenced
+  `.chart-card__swatch` CSS rule was removed (grep-verified single
+  producer/consumer).
+- **Sync widget demoted below the chart list**: `<SyncWidget />` moves in
+  `Dashboard.tsx` from above the chart list to after it (before
+  `TemplatePicker`), so the dashboard's actual content — the user's charts —
+  leads, and account/sync chrome trails. `.sync` is restyled more compactly
+  (tighter padding, `margin-top` instead of `margin-bottom` for its new
+  trailing position), and its Disconnect button is scoped-softened
+  (`.sync__btn.btn--danger-text`) to a muted color at rest with the danger
+  red only surfacing on hover — quieter than Dashboard's Delete button,
+  which intentionally stays red at rest since it's more destructive.
+  Compatibility constraint: no accessible names, text content, aria-labels,
+  `data-status` attributes, or button labels changed — layout and visual
+  weight only, verified by an automated pass that these strings and all
+  buttons remain intact and clickable.

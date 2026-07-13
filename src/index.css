@@ -162,15 +162,17 @@ button {
   font-size: 0.85rem;
   margin-bottom: 1.25rem;
 }
-/* --------------------------------------------------- Google Drive sync widget */
+/* --------------------------------------------------- Google Drive sync widget
+ * Lives below the chart list (content-first, design review #9) — kept compact
+ * and quiet since it's secondary chrome, not the dashboard's main content. */
 .sync {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  margin-bottom: 1.5rem;
-  padding: 0.55rem 0.75rem;
+  gap: 0.4rem 0.6rem;
+  margin-top: 1.5rem;
+  padding: 0.45rem 0.65rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -247,6 +249,17 @@ button {
 .sync__btn {
   padding-inline: 0.7rem;
 }
+/* Disconnect is a reachable-but-quiet action here (unlike Dashboard's Delete,
+ * which stays red at rest) — muted text, danger color only surfaces on
+ * hover/focus. Scoped to .sync__btn so it doesn't touch the shared
+ * .btn--danger-text used elsewhere. */
+.sync__btn.btn--danger-text {
+  color: var(--text-muted);
+}
+.sync__btn.btn--danger-text:hover {
+  color: #c0362c;
+  background: color-mix(in srgb, #c0362c 12%, transparent);
+}
 @media (max-width: 480px) {
   .sync {
     align-items: stretch;
@@ -309,14 +322,38 @@ button {
   padding: 0.4rem 0.55rem;
   min-width: 0;
 }
-.chart-card__swatch {
+/* Live 3x3 mini-mandala thumbnail (ChartThumb) — center tile is the goal,
+ * the 8 outer tiles are pillars with a bottom-anchored progress fill. */
+.chart-thumb {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5px;
+  width: 44px;
+  height: 44px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--grid-bg);
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  margin-top: 0.1rem;
-  border-radius: 999px;
-  background: var(--goal-bg);
-  box-shadow: inset 0 0 0 2px var(--surface), 0 0 0 1px var(--border);
+}
+.chart-thumb__tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.5px;
+  background: color-mix(in srgb, var(--tile-accent, var(--accent)) 18%, var(--surface));
+  transition: opacity 0.12s var(--ease);
+}
+.chart-thumb__tile.is-empty {
+  opacity: 0.35;
+}
+.chart-thumb__tile--center {
+  background: var(--goal-bg-solid);
+}
+.chart-thumb__fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--tile-accent, var(--accent)) 55%, var(--surface));
 }
 .chart-card__body {
   display: grid;
@@ -1124,7 +1161,7 @@ select.field__input {
   grid-template-columns: repeat(3, 1fr);
   gap: var(--block-gap);
   padding: var(--block-gap);
-  background: var(--border-strong);
+  background: var(--grid-bg);
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
 }
@@ -1132,14 +1169,16 @@ select.field__input {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--cell-gap);
-  background: var(--border);
+  /* Lighter than .grid's seam so cell gaps inside a block read as a subtler
+   * weight than the block gaps around it (the grid's two-weight hierarchy). */
+  background: color-mix(in srgb, var(--grid-bg) 45%, var(--surface));
   border-radius: var(--radius-sm);
   overflow: hidden;
   transition: box-shadow 0.15s var(--ease), transform 0.15s var(--ease);
 }
 .block--pillar {
   /* subtle inner grid lines take the pillar hue */
-  background: color-mix(in srgb, var(--cell-accent) 18%, var(--border));
+  background: color-mix(in srgb, var(--cell-accent) 18%, var(--grid-bg));
 }
 .block.is-highlighted {
   box-shadow: 0 0 0 2px var(--cell-accent), 0 6px 18px
@@ -1349,6 +1388,14 @@ select.field__input {
     opacity: 1;
   }
 }
+/* Expand the hit area to >=32px (WCAG 2.2 2.5.8) without growing the visible
+ * 20px glyph — the pseudo-element's inset overlaps neighboring chrome but
+ * lands its clicks on this button since it's a child of it. */
+.cell__expand::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
 
 /* "has description/reward" indicator dot. */
 .cell__detail-dot {
@@ -1391,6 +1438,13 @@ select.field__input {
 .status-done .cell__status {
   color: var(--status-done);
 }
+/* Expand the hit area to >=32px (WCAG 2.2 2.5.8) without growing the visible
+ * 20px glyph. */
+.cell__status::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
 
 /* ---------------------------------------------------------- habits (v1.2) */
 /* "Did it today" check — a ring in the status corner, distinct from the task
@@ -1420,6 +1474,13 @@ select.field__input {
 }
 .is-checked-today .cell__habit-check:hover {
   color: var(--status-done);
+}
+/* Expand the hit area to >=32px (WCAG 2.2 2.5.8) without growing the visible
+ * 20px glyph. */
+.cell__habit-check::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
 }
 /* Established-habit badge — a distinct seal, no daily control. */
 .cell__habit-badge {
@@ -1498,12 +1559,12 @@ select.field__input {
   aspect-ratio: 1;
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px rgba(15, 23, 42, 0.08);
-  background: var(--border-strong);
+  background: var(--grid-bg);
   padding: var(--cell-gap);
   gap: var(--cell-gap);
 }
 .block--mobile.block--pillar {
-  background: color-mix(in srgb, var(--cell-accent) 22%, var(--border-strong));
+  background: color-mix(in srgb, var(--cell-accent) 22%, var(--grid-bg));
 }
 .block--mobile .cell {
   font-size: 0.9rem;
@@ -1589,7 +1650,7 @@ select.field__input {
   grid-template-columns: repeat(3, 1fr);
   gap: var(--block-gap);
   padding: var(--block-gap);
-  background: var(--border-strong);
+  background: var(--grid-bg);
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
 }
@@ -1655,14 +1716,25 @@ select.field__input {
 .dashboard__cta-review {
   position: relative;
 }
+/* Room for the due-count pill so it sits clear of the "Review" label instead
+ * of overlapping it (the pill is wider than the dot it replaced). */
+.dashboard__cta-review:has(.due-badge) {
+  padding-right: 1.4rem;
+}
 .due-badge {
   position: absolute;
   top: 3px;
   right: 3px;
-  width: 8px;
-  height: 8px;
+  min-width: 15px;
+  height: 15px;
   border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  color: #fff;
   background: var(--status-doing);
+  padding: 0 3px;
   box-shadow: 0 0 0 2px var(--surface);
 }
 
@@ -1790,10 +1862,10 @@ select.field__input {
   border-color: var(--status-done);
 }
 .mit__check {
+  position: relative;
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-  margin-top: 0.1rem;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
   border: 2px solid var(--border-strong);
   background: var(--surface);
@@ -1802,6 +1874,13 @@ select.field__input {
   align-items: center;
   justify-content: center;
   font-size: 0.85rem;
+}
+/* Expand the hit area to a ~44px effective target (WCAG 2.2 2.5.8) without
+ * growing the visible 32px ring. */
+.mit__check::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
 }
 .mit__check:hover {
   border-color: var(--accent);
