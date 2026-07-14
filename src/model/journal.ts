@@ -2,8 +2,8 @@
 // Pure, unit-tested helpers for validation-with-defaults, day pruning, ISO-week
 // keying, the MIT cap, and the weekly-review "due" signal. No I/O, no React.
 
-import { localDayKey, streakAcrossCharts } from './completions';
-import { isActionFilled } from './progress';
+import { isHabitCheckedToday, localDayKey, streakAcrossCharts } from './completions';
+import { isActionFilled, isWeeklyHabit } from './progress';
 import type { Action, Chart, DayPlan, Review } from './types';
 
 /** Structural cap on the number of MITs ("top 3 for today"). */
@@ -165,6 +165,26 @@ export function weekCompletions(action: Action, now: Date = new Date()): number 
  */
 export function isWeeklySatisfied(action: Action, now: Date = new Date()): boolean {
   return action.weeklyTarget >= 1 && weekCompletions(action, now) >= action.weeklyTarget;
+}
+
+/**
+ * Count of a chart's non-established, filled habits still "due" today (v2.1,
+ * SPEC 19) — used for the Today view's per-tab count badge. A daily habit is
+ * due unless already checked off today; a weekly-cadence habit is due unless
+ * it has already met its weekly target OR it's already been checked off today
+ * (a same-day recheck wouldn't change what's still outstanding).
+ */
+export function dueHabitCount(chart: Chart, now: Date = new Date()): number {
+  let count = 0;
+  for (const pillar of chart.pillars) {
+    for (const action of pillar.actions) {
+      if (!action.habit || action.established || !isActionFilled(action)) continue;
+      const checkedToday = isHabitCheckedToday(action, now);
+      const due = isWeeklyHabit(action) ? !isWeeklySatisfied(action, now) && !checkedToday : !checkedToday;
+      if (due) count++;
+    }
+  }
+  return count;
 }
 
 // --- Weekly-review due signal (SPEC 11.3) ------------------------------------

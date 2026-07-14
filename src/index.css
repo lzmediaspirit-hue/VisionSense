@@ -1957,6 +1957,73 @@ select.field__input {
   margin-top: 0.6rem;
 }
 
+/* Chart tabs (v2.1, SPEC 19): only rendered with more than one chart, scoping
+ * the Daily/Weekly habit sections to one chart at a time. `overflow-x: auto`
+ * keeps a long tab row scrolling within the bar instead of widening the page
+ * (hard rule: no page-level horizontal scroll at 375px). */
+.today__tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-bottom: 1rem;
+  padding-bottom: 2px; /* keeps the focus ring from being clipped by overflow */
+}
+.today__tabs::-webkit-scrollbar {
+  display: none;
+}
+.today__tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px; /* touch target rule since v1.8 */
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.today__tab:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.today__tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.today__tab-title {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Same pill treatment as .due-badge (colored dot on a light surface). The
+ * active tab already has a colored fill, so its count pill switches to the
+ * translucent-white treatment used by .cta-streak instead, to keep reading as
+ * "on top of" the accent rather than clashing with it. */
+.today__tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+  color: #fff;
+  background: var(--status-doing);
+}
+.today__tab.is-active .today__tab-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .mit-list {
   list-style: none;
   padding: 0;
@@ -2031,20 +2098,11 @@ select.field__input {
 }
 
 /* Pillar grouping (v1.9, SPEC 16): the Today habit lists group under a
- * chart eyebrow (only shown with more than one chart) and a pillar
- * sub-header, instead of repeating "chart · pillar" on every row. */
+ * pillar sub-header instead of repeating "chart · pillar" on every row. With
+ * more than one chart, the active chart tab (v2.1, SPEC 19) already names the
+ * chart, so `.today__groups` now only ever holds a single chart-group. */
 .today__groups {
   display: grid;
-}
-.today__chart-group + .today__chart-group {
-  margin-top: 1.1rem;
-}
-.today__chart-eyebrow {
-  font-size: 0.62rem;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin: 0 0 0.5rem;
 }
 .today__pillar-group + .today__pillar-group {
   margin-top: 0.85rem;

@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isHabitCheckedToday, localDayKey, streakAcrossCharts } from '../model/completions';
-import { isWeeklySatisfied, MAX_MITS, weekCompletions } from '../model/journal';
+import { dueHabitCount, isWeeklySatisfied, MAX_MITS, weekCompletions } from '../model/journal';
 import { setActionStatus, toggleHabitToday } from '../model/operations';
 import { findActionById, isActionDone, isActionFilled, isWeeklyHabit } from '../model/progress';
 import type { Action, Chart, DayPlan } from '../model/types';
@@ -102,6 +102,8 @@ export function TodayView({ onClose }: TodayViewProps) {
   const charts = state.charts;
   const [toast, setToast] = useState<RewardToastData | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [activeChartIdState, setActiveChartIdState] = useState<string | null>(null);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const today = new Date();
   const todayKey = localDayKey(today);
@@ -183,14 +185,65 @@ export function TodayView({ onClose }: TodayViewProps) {
     return { dailyHabitRows: daily, weeklyHabitRows: weekly };
   }, [charts]);
 
-  // Group each habit list by pillar (and, when relevant, chart), so the Today
-  // view reads like "here's what's due in each area of your life" instead of
-  // repeating the chart name on every row (v1.9, SPEC 16). A chart eyebrow is
-  // only shown when the user has more than one chart — with a single chart
-  // it would be pure noise.
-  const dailyHabitGroups = useMemo(() => groupHabitRows(dailyHabitRows), [dailyHabitRows]);
-  const weeklyHabitGroups = useMemo(() => groupHabitRows(weeklyHabitRows), [weeklyHabitRows]);
   const multiChart = charts.length > 1;
+
+  // Chart tabs (v2.1, SPEC 19): only meaningful with more than one chart. Each
+  // tab's due-count badge is that chart's still-due habits today, independent
+  // of which tab is currently active.
+  const chartTabs = useMemo(
+    () =>
+      charts.map((chart) => ({
+        id: chart.id,
+        title: chartTitleOf(chart),
+        due: dueHabitCount(chart, today),
+      })),
+    [charts, today],
+  );
+
+  // Default tab: the first chart with a due habit today, else the first chart
+  // with any habit rows at all, else just the first chart (SPEC 19).
+  const defaultChartId = useMemo(() => {
+    if (charts.length === 0) return null;
+    const withDue = chartTabs.find((t) => t.due > 0);
+    if (withDue) return withDue.id;
+    const habitChartIds = new Set([...dailyHabitRows, ...weeklyHabitRows].map((row) => row.chart.id));
+    const withHabits = charts.find((c) => habitChartIds.has(c.id));
+    return (withHabits ?? charts[0]).id;
+  }, [charts, chartTabs, dailyHabitRows, weeklyHabitRows]);
+
+  // Resolved defensively every render: if the stored id no longer matches a
+  // chart (deleted, or nothing picked yet), fall back to the default.
+  const activeChartId =
+    activeChartIdState !== null && charts.some((c) => c.id === activeChartIdState)
+      ? activeChartIdState
+      : defaultChartId;
+
+  function handleTabKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowRight' ? 1 : -1;
+    const nextIndex = (index + delta + chartTabs.length) % chartTabs.length;
+    setActiveChartIdState(chartTabs[nextIndex].id);
+    tabRefs.current[nextIndex]?.focus();
+  }
+
+  // With tabs active, only the Daily/Weekly habit sections scope to the active
+  // chart — the hero/streak, MIT picker, reflection, and done-today summary
+  // stay cross-chart (SPEC 19).
+  const activeDailyHabitRows = useMemo(
+    () => (multiChart ? dailyHabitRows.filter((row) => row.chart.id === activeChartId) : dailyHabitRows),
+    [multiChart, dailyHabitRows, activeChartId],
+  );
+  const activeWeeklyHabitRows = useMemo(
+    () => (multiChart ? weeklyHabitRows.filter((row) => row.chart.id === activeChartId) : weeklyHabitRows),
+    [multiChart, weeklyHabitRows, activeChartId],
+  );
+
+  // Grouped by pillar only — now that a tab scopes each section to one chart,
+  // the chart eyebrow this used to render is redundant with the active tab's
+  // own label (v2.1, SPEC 19).
+  const dailyHabitGroups = useMemo(() => groupHabitRows(activeDailyHabitRows), [activeDailyHabitRows]);
+  const weeklyHabitGroups = useMemo(() => groupHabitRows(activeWeeklyHabitRows), [activeWeeklyHabitRows]);
 
   // Auto summary: what actually got done today across all charts.
   const doneToday = useMemo(() => {
@@ -293,117 +346,152 @@ export function TodayView({ onClose }: TodayViewProps) {
         )}
       </section>
 
-      {/* Daily habits */}
-      <section className="today__section" aria-labelledby="today-habits-h">
-        <h2 className="today__section-title" id="today-habits-h">
-          Daily habits
-        </h2>
-        {dailyHabitRows.length === 0 ? (
-          <p className="today__empty">
-            No daily habits yet. Turn any action into a habit from its detail dialog to check it off
-            here each day.
-          </p>
-        ) : (
-          <div className="today__groups">
-            {dailyHabitGroups.map((cg) => (
-              <div key={cg.chartId} className="today__chart-group">
-                {multiChart && <p className="today__chart-eyebrow">{cg.chartTitle}</p>}
-                {cg.pillars.map((pg) => (
-                  <div key={pg.pillarIndex} className="today__pillar-group">
-                    <p className="today__pillar-name">{pg.pillarName}</p>
-                    <ul className="mit-list">
-                      {pg.rows.map(({ chart, pillarIndex, actionIndex, action }) => {
-                        const checked = isHabitCheckedToday(action, today);
-                        return (
-                          <li
-                            key={`${chart.id}:${action.id}`}
-                            className={`mit ${checked ? 'is-done' : ''}`.trim()}
-                          >
-                            <button
-                              type="button"
-                              className="mit__check"
-                              aria-pressed={checked}
-                              aria-label={`${checked ? 'Undo today for' : 'Did it today:'} “${action.text.trim() || 'habit'}”`}
-                              onClick={() => toggleComplete(chart.id, pillarIndex, actionIndex, action)}
-                            >
-                              <span aria-hidden="true">{checked ? '✓' : ''}</span>
-                            </button>
-                            <div className="mit__body">
-                              <span className="mit__text">{action.text.trim() || 'Untitled habit'}</span>
-                              {action.cue.trim() !== '' && (
-                                <span className="mit__cue">
-                                  <span aria-hidden="true">⏱ </span>
-                                  {action.cue.trim()}
-                                </span>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Weekly habits (v1.5, SPEC 12): shown only when at least one exists — no
-          empty state, since daily habits already cover the "get started" nudge. */}
-      {weeklyHabitRows.length > 0 && (
-        <section className="today__section" aria-labelledby="today-weekly-habits-h">
-          <h2 className="today__section-title" id="today-weekly-habits-h">
-            Weekly habits
-          </h2>
-          <div className="today__groups">
-            {weeklyHabitGroups.map((cg) => (
-              <div key={cg.chartId} className="today__chart-group">
-                {multiChart && <p className="today__chart-eyebrow">{cg.chartTitle}</p>}
-                {cg.pillars.map((pg) => (
-                  <div key={pg.pillarIndex} className="today__pillar-group">
-                    <p className="today__pillar-name">{pg.pillarName}</p>
-                    <ul className="mit-list">
-                      {pg.rows.map(({ chart, pillarIndex, actionIndex, action }) => {
-                        const checked = isHabitCheckedToday(action, today);
-                        const satisfied = isWeeklySatisfied(action, today);
-                        return (
-                          <li
-                            key={`${chart.id}:${action.id}`}
-                            className={`mit ${satisfied ? 'is-done' : ''}`.trim()}
-                          >
-                            <button
-                              type="button"
-                              className="mit__check"
-                              aria-pressed={checked}
-                              aria-label={`${checked ? 'Undo today for' : 'Did it today:'} “${action.text.trim() || 'habit'}”`}
-                              onClick={() => toggleComplete(chart.id, pillarIndex, actionIndex, action)}
-                            >
-                              <span aria-hidden="true">{checked ? '✓' : ''}</span>
-                            </button>
-                            <div className="mit__body">
-                              <span className="mit__text">{action.text.trim() || 'Untitled habit'}</span>
-                              {action.cue.trim() !== '' && (
-                                <span className="mit__cue">
-                                  <span aria-hidden="true">⏱ </span>
-                                  {action.cue.trim()}
-                                </span>
-                              )}
-                            </div>
-                            <span className="mit__week">
-                              {weekCompletions(action, today)} / {action.weeklyTarget} this week
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </section>
+      {/* Chart tabs (v2.1, SPEC 19): only rendered with more than one chart —
+          they scope just the two habit sections below, since MITs are a
+          cross-chart, day-level pick and stay global (SPEC 19). */}
+      {multiChart && (
+        <div className="today__tabs" role="tablist" aria-label="Charts">
+          {chartTabs.map((tab, index) => {
+            const selected = tab.id === activeChartId;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`today-tab-${tab.id}`}
+                className={`today__tab ${selected ? 'is-active' : ''}`.trim()}
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                ref={(el) => {
+                  tabRefs.current[index] = el;
+                }}
+                onClick={() => setActiveChartIdState(tab.id)}
+                onKeyDown={(e) => handleTabKeyDown(e, index)}
+              >
+                <span className="today__tab-title">{tab.title}</span>
+                {tab.due > 0 && (
+                  <span className="today__tab-count" aria-hidden="true">
+                    {tab.due}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       )}
+
+      <div {...(multiChart ? { role: 'tabpanel', 'aria-labelledby': `today-tab-${activeChartId}` } : {})}>
+        {/* Daily habits */}
+        <section className="today__section" aria-labelledby="today-habits-h">
+          <h2 className="today__section-title" id="today-habits-h">
+            Daily habits
+          </h2>
+          {activeDailyHabitRows.length === 0 ? (
+            <p className="today__empty">
+              No daily habits yet. Turn any action into a habit from its detail dialog to check it off
+              here each day.
+            </p>
+          ) : (
+            <div className="today__groups">
+              {dailyHabitGroups.map((cg) => (
+                <div key={cg.chartId} className="today__chart-group">
+                  {cg.pillars.map((pg) => (
+                    <div key={pg.pillarIndex} className="today__pillar-group">
+                      <p className="today__pillar-name">{pg.pillarName}</p>
+                      <ul className="mit-list">
+                        {pg.rows.map(({ chart, pillarIndex, actionIndex, action }) => {
+                          const checked = isHabitCheckedToday(action, today);
+                          return (
+                            <li
+                              key={`${chart.id}:${action.id}`}
+                              className={`mit ${checked ? 'is-done' : ''}`.trim()}
+                            >
+                              <button
+                                type="button"
+                                className="mit__check"
+                                aria-pressed={checked}
+                                aria-label={`${checked ? 'Undo today for' : 'Did it today:'} “${action.text.trim() || 'habit'}”`}
+                                onClick={() => toggleComplete(chart.id, pillarIndex, actionIndex, action)}
+                              >
+                                <span aria-hidden="true">{checked ? '✓' : ''}</span>
+                              </button>
+                              <div className="mit__body">
+                                <span className="mit__text">{action.text.trim() || 'Untitled habit'}</span>
+                                {action.cue.trim() !== '' && (
+                                  <span className="mit__cue">
+                                    <span aria-hidden="true">⏱ </span>
+                                    {action.cue.trim()}
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Weekly habits (v1.5, SPEC 12): shown only when the ACTIVE chart has
+            any — no empty state, since daily habits already cover the "get
+            started" nudge (v2.1, SPEC 19: scoped per-tab). */}
+        {activeWeeklyHabitRows.length > 0 && (
+          <section className="today__section" aria-labelledby="today-weekly-habits-h">
+            <h2 className="today__section-title" id="today-weekly-habits-h">
+              Weekly habits
+            </h2>
+            <div className="today__groups">
+              {weeklyHabitGroups.map((cg) => (
+                <div key={cg.chartId} className="today__chart-group">
+                  {cg.pillars.map((pg) => (
+                    <div key={pg.pillarIndex} className="today__pillar-group">
+                      <p className="today__pillar-name">{pg.pillarName}</p>
+                      <ul className="mit-list">
+                        {pg.rows.map(({ chart, pillarIndex, actionIndex, action }) => {
+                          const checked = isHabitCheckedToday(action, today);
+                          const satisfied = isWeeklySatisfied(action, today);
+                          return (
+                            <li
+                              key={`${chart.id}:${action.id}`}
+                              className={`mit ${satisfied ? 'is-done' : ''}`.trim()}
+                            >
+                              <button
+                                type="button"
+                                className="mit__check"
+                                aria-pressed={checked}
+                                aria-label={`${checked ? 'Undo today for' : 'Did it today:'} “${action.text.trim() || 'habit'}”`}
+                                onClick={() => toggleComplete(chart.id, pillarIndex, actionIndex, action)}
+                              >
+                                <span aria-hidden="true">{checked ? '✓' : ''}</span>
+                              </button>
+                              <div className="mit__body">
+                                <span className="mit__text">{action.text.trim() || 'Untitled habit'}</span>
+                                {action.cue.trim() !== '' && (
+                                  <span className="mit__cue">
+                                    <span aria-hidden="true">⏱ </span>
+                                    {action.cue.trim()}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="mit__week">
+                                {weekCompletions(action, today)} / {action.weeklyTarget} this week
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
 
       {/* Evening reflection */}
       <section className="today__section" aria-labelledby="today-reflect-h">
