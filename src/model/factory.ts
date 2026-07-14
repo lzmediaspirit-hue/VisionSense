@@ -28,6 +28,7 @@ export function createAction(): Action {
     completions: [],
     cue: '',
     weeklyTarget: 0,
+    updatedAt: '',
   };
 }
 

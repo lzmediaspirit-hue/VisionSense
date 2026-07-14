@@ -275,6 +275,39 @@ describe('storage', () => {
     expect(loaded.charts[0].pillars[0].actions[0].weeklyTarget).toBe(3);
   });
 
+  // --- v2.2 backward compatibility (SPEC 20) ---------------------------------
+
+  it('defaults action.updatedAt to \'\' when absent or wrong type (pre-v2.2 data)', () => {
+    const state = sampleState();
+    const raw = JSON.parse(JSON.stringify(state));
+    // absent
+    raw.charts[0].pillars[0].actions[0] = { ...raw.charts[0].pillars[0].actions[0] };
+    delete raw.charts[0].pillars[0].actions[0].updatedAt;
+    // wrong type
+    raw.charts[0].pillars[0].actions[1] = {
+      ...raw.charts[0].pillars[0].actions[1],
+      updatedAt: 12345,
+    };
+    storage.setItem(STORAGE_KEY, JSON.stringify(raw));
+
+    const loaded = loadState(storage);
+    expect(storage.getItem(BACKUP_KEY)).toBeNull(); // additive, not corrupt
+    const actions = loaded.charts[0].pillars[0].actions;
+    expect(actions[0].updatedAt).toBe('');
+    expect(actions[1].updatedAt).toBe('');
+  });
+
+  it('round-trips a valid action.updatedAt', () => {
+    const state = sampleState();
+    state.charts[0].pillars[0].actions[0] = {
+      ...state.charts[0].pillars[0].actions[0],
+      updatedAt: '2026-07-10T08:00:00.000Z',
+    };
+    saveState(state, storage);
+    const loaded = loadState(storage);
+    expect(loaded.charts[0].pillars[0].actions[0].updatedAt).toBe('2026-07-10T08:00:00.000Z');
+  });
+
   it('preserves present v1.1 fields on load', () => {
     const state = sampleState();
     state.charts[0].pillars[0].actions[0] = {
