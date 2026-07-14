@@ -77,6 +77,10 @@ function validateAction(v: unknown): Action | null {
     v.weeklyTarget <= 7
       ? v.weeklyTarget
       : 0;
+  // v2.2 per-action sync stamp (SPEC 20) — same additive rule: keep if a
+  // string, else '' (oldest possible), so pre-v2.2 blobs/exports degrade to
+  // chart-level LWW in merge rather than being rejected.
+  const updatedAt = typeof v.updatedAt === 'string' ? v.updatedAt : '';
   return {
     id,
     text,
@@ -89,6 +93,7 @@ function validateAction(v: unknown): Action | null {
     completions,
     cue,
     weeklyTarget,
+    updatedAt,
   };
 }
 

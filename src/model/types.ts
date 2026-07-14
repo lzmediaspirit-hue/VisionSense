@@ -26,6 +26,13 @@ export interface Action {
   completions: string[]; // ISO timestamps of daily check-offs, at most one per local day (v1.2)
   cue: string; // '' = none; the "when & where" of an if-then plan (v1.4, SPEC 11.1)
   weeklyTarget: number; // 0 = daily habit; N = target check-off days per ISO week (v1.5, SPEC 12)
+  /**
+   * ISO timestamp of the last mutation to THIS action specifically (v2.2, SPEC
+   * 20). '' = never stamped (pre-v2.2 data), which sorts as the oldest possible
+   * value in merge comparisons. Chart-level-only edits (goal, theme, pillar
+   * rename/color) do not touch this.
+   */
+  updatedAt: string;
 }
 
 export interface Pillar {

@@ -1,9 +1,21 @@
-// Pure merge logic for Google Drive sync (SPEC 10.3). No I/O, no globals — every
-// function here is deterministic and unit-tested (see merge.test.ts).
+// Pure merge logic for Google Drive sync (SPEC 10.3, SPEC 20). No I/O, no
+// globals — every function here is deterministic and unit-tested (see
+// merge.test.ts).
 //
 // Model:
-//   - Charts are merged per id, LAST-WRITE-WINS on `updatedAt`.
 //   - Charts present on only one side are kept (union).
+//   - Charts present on BOTH sides are merged STRUCTURALLY, per action, not
+//     whole-chart LWW (SPEC 20): a single stale field on one device no longer
+//     wipes every other field the other device edited. The side with the
+//     strictly newer `chart.updatedAt` is the WINNER (ties -> local) and
+//     supplies chart-level fields (goal, themeId, templateId, createdAt,
+//     pillar names/colors); merged `chart.updatedAt` is the max of both
+//     sides. Actions merge per position (8x8 is fixed): scalar fields come
+//     from whichever side has the strictly newer `action.updatedAt` (ties ->
+//     local; '' — pre-v2.2 data — always loses to a real stamp), while
+//     `completions` is always the UNION of both sides regardless of which
+//     side won the scalars (habit check-ins are an append-mostly set; a union
+//     never loses a check-in).
 //   - Deletions are tombstones: `Record<chartId, deletedAtISO>`. A tombstone that
 //     is NEWER than a chart's `updatedAt` deletes it; otherwise the chart survives
 //     (it was re-created/edited after the deletion) and the stale tombstone is
@@ -11,7 +23,7 @@
 //   - Tombstones older than 90 days are pruned.
 // The result is stable under re-merge (idempotent).
 
-import type { Chart } from '../model/types';
+import type { Action, Chart } from '../model/types';
 
 export type Tombstones = Record<string, string>;
 
@@ -44,6 +56,53 @@ function mergeTombstones(a: Tombstones, b: Tombstones): Tombstones {
 }
 
 /**
+ * Merge one action position. `remoteChartWins` is the CHART-level winner (not
+ * an action-level decision) and is only consulted for the defensive id-
+ * mismatch path: same chart id but a differing action id at this position
+ * shouldn't happen (the 8x8 grid is structural) but if it ever does, the
+ * chart-level winner's action is kept unchanged rather than guessing.
+ */
+function mergeAction(localAction: Action, remoteAction: Action, remoteChartWins: boolean): Action {
+  if (localAction.id !== remoteAction.id) {
+    return remoteChartWins ? remoteAction : localAction;
+  }
+  // Scalar fields: strictly-newer action.updatedAt wins; ties -> local. ''
+  // (never stamped) parses as epoch 0, so it always loses to a real stamp.
+  const remoteNewer = ms(remoteAction.updatedAt) > ms(localAction.updatedAt);
+  const scalarSource = remoteNewer ? remoteAction : localAction;
+  // completions union regardless of which side won the scalars — check-ins
+  // are an append-mostly set, so a union never drops one.
+  const completions = Array.from(
+    new Set([...localAction.completions, ...remoteAction.completions]),
+  ).sort();
+  return { ...scalarSource, completions };
+}
+
+/**
+ * Structurally merge two charts that share an id (SPEC 20). Chart-level
+ * fields come from the LWW winner (ties -> local); actions merge per
+ * position via `mergeAction`.
+ */
+function mergeChart(local: Chart, remote: Chart): Chart {
+  const remoteChartWins = ms(remote.updatedAt) > ms(local.updatedAt); // ties -> local
+  const winner = remoteChartWins ? remote : local;
+  const mergedUpdatedAt = remoteChartWins ? remote.updatedAt : local.updatedAt; // = max(both)
+  const pillars = winner.pillars.map((winnerPillar, pillarIndex) => {
+    const localPillar = local.pillars[pillarIndex];
+    const remotePillar = remote.pillars[pillarIndex];
+    const actions = winnerPillar.actions.map((_, actionIndex) =>
+      mergeAction(
+        localPillar.actions[actionIndex],
+        remotePillar.actions[actionIndex],
+        remoteChartWins,
+      ),
+    );
+    return { ...winnerPillar, actions };
+  });
+  return { ...winner, pillars, updatedAt: mergedUpdatedAt };
+}
+
+/**
  * Merge two sides into a single {charts, tombstones}. `now` is injectable for
  * deterministic pruning tests (defaults to Date.now()).
  */
@@ -52,14 +111,13 @@ export function mergeSides(
   remote: MergeSide,
   now: number = Date.now(),
 ): MergeResult {
-  // 1. Per-id LWW union of charts.
+  // 1. Per-id union of charts: present on one side only => kept as-is;
+  //    present on both => structural per-action merge (SPEC 20).
   const byId = new Map<string, Chart>();
   for (const chart of local.charts) byId.set(chart.id, chart);
   for (const chart of remote.charts) {
-    const existing = byId.get(chart.id);
-    if (!existing || ms(chart.updatedAt) > ms(existing.updatedAt)) {
-      byId.set(chart.id, chart);
-    }
+    const existingLocal = byId.get(chart.id);
+    byId.set(chart.id, existingLocal ? mergeChart(existingLocal, chart) : chart);
   }
 
   // 2. Union of tombstones (newest deletion wins per id).

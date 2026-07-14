@@ -28,16 +28,18 @@ import { useStore } from '../state/store';
 import { effectiveClientId, isSyncConfigured } from './config';
 import {
   createFile,
+  deleteFile,
   downloadFile,
   DriveError,
   fetchUserEmail,
-  findFile,
+  listFiles,
   updateFile,
+  type DriveFileRef,
   type DrivePayload,
 } from './drive';
 import { requestAccessToken, revokeAccessToken, type AccessToken } from './gis';
-import { mergeSides } from './merge';
-import { mergeJournals } from './journalMerge';
+import { mergeSides, type MergeSide } from './merge';
+import { mergeJournals, type Journal } from './journalMerge';
 import {
   clearSyncMeta,
   loadSyncMeta,
@@ -83,6 +85,23 @@ function makePayload(
     savedAt: new Date().toISOString(),
     journal: { days, reviews },
   };
+}
+
+/**
+ * Deterministically pick the canonical file among duplicates (SPEC 20): the
+ * oldest `createdTime`, ties broken by the lexicographically smaller id — so
+ * every device reconciling the same duplicate set converges on the SAME file
+ * without needing to coordinate. Exported for direct unit coverage (the rest
+ * of the controller needs a full GIS/Drive mock harness that is out of scope
+ * here — this pure helper does not).
+ */
+export function canonicalFile(files: readonly DriveFileRef[]): DriveFileRef {
+  return files.reduce((oldest, f) => {
+    const t = Date.parse(f.createdTime);
+    const tOldest = Date.parse(oldest.createdTime);
+    if (t !== tOldest) return t < tOldest ? f : oldest;
+    return f.id < oldest.id ? f : oldest;
+  });
 }
 
 function friendlyError(e: unknown): string {
@@ -160,6 +179,17 @@ function SyncController({ children }: { children: ReactNode }) {
   );
 
   // Full sync: pull remote -> merge with local -> save merged locally -> push.
+  //
+  // Duplicate-file reconciliation (SPEC 20): `findFile` used to grab only
+  // `files[0]`, so two `visionsense.json` files in appDataFolder (a race
+  // between two devices each creating one when neither saw a remote copy yet)
+  // meant each device kept syncing to its own file forever — both report
+  // "synced" while the data never converges. Every listed match is now
+  // downloaded and folded pairwise into one remote side before merging with
+  // local, then the merged payload is written to a single CANONICAL file
+  // (oldest `createdTime`, ties broken by the smaller id — deterministic so
+  // every device converges on the same one) and every other duplicate is
+  // best-effort deleted.
   const fullSync = useCallback(
     async (prompt: '' | 'consent') => {
       const token = await acquireToken(prompt);
@@ -167,38 +197,39 @@ function SyncController({ children }: { children: ReactNode }) {
 
       const resolvedEmail = meta.email || (await fetchUserEmail(token));
 
-      let fileId = meta.fileId ?? (await findFile(token));
-      let remoteCharts: Chart[] = [];
-      let remoteTombstones: Record<string, string> = {};
-      let remoteDays: Record<string, DayPlan> = {};
-      let remoteReviews: Record<string, Review> = {};
-      if (fileId) {
+      const listed = await listFiles(token);
+      // A stale `meta.fileId` might not be among the current listing (e.g. a
+      // previous reconciliation on another device deleted it as a duplicate);
+      // fetch it too so its data isn't silently lost, but a 404 there just
+      // means it's really gone.
+      const idsToFetch = new Set(listed.map((f) => f.id));
+      if (meta.fileId) idsToFetch.add(meta.fileId);
+
+      let remote: MergeSide = { charts: [], tombstones: {} };
+      let remoteJournal: Journal = { days: {}, reviews: {} };
+      for (const id of idsToFetch) {
         try {
-          const raw = await downloadFile(token, fileId);
+          const raw = await downloadFile(token, id);
           const parsed = parseDrivePayload(raw);
-          if (parsed) {
-            remoteCharts = parsed.charts;
-            remoteTombstones = parsed.deletedChartIds;
-            remoteDays = parsed.journal?.days ?? {};
-            remoteReviews = parsed.journal?.reviews ?? {};
-          }
+          if (!parsed) continue;
+          remote = mergeSides(remote, { charts: parsed.charts, tombstones: parsed.deletedChartIds });
+          remoteJournal = mergeJournals(remoteJournal, {
+            days: parsed.journal?.days ?? {},
+            reviews: parsed.journal?.reviews ?? {},
+          });
         } catch (e) {
-          // A missing/renamed file (404) just means "no remote yet"; re-find once.
-          if (e instanceof DriveError && e.status === 404) {
-            fileId = null;
-          } else {
-            throw e;
-          }
+          if (e instanceof DriveError && e.status === 404) continue; // gone; drop it
+          throw e;
         }
       }
 
       const merged = mergeSides(
         { charts: chartsRef.current, tombstones: meta.deletedChartIds },
-        { charts: remoteCharts, tombstones: remoteTombstones },
+        remote,
       );
       const mergedJournal = mergeJournals(
         { days: daysRef.current, reviews: reviewsRef.current },
-        { days: remoteDays, reviews: remoteReviews },
+        remoteJournal,
       );
 
       // Save merged charts + journal locally and remember the references so the
@@ -215,8 +246,23 @@ function SyncController({ children }: { children: ReactNode }) {
         mergedJournal.days,
         mergedJournal.reviews,
       );
-      if (fileId) await updateFile(token, fileId, payload);
-      else fileId = await createFile(token, payload);
+
+      let fileId: string;
+      if (listed.length > 0) {
+        const canonical = canonicalFile(listed);
+        fileId = canonical.id;
+        await updateFile(token, fileId, payload);
+        for (const f of listed) {
+          if (f.id === fileId) continue;
+          try {
+            await deleteFile(token, f.id);
+          } catch {
+            // Best effort: a duplicate left behind gets cleaned up next sync.
+          }
+        }
+      } else {
+        fileId = await createFile(token, payload);
+      }
 
       persist({
         enabled: true,
@@ -237,19 +283,45 @@ function SyncController({ children }: { children: ReactNode }) {
     const days = daysRef.current;
     const reviews = reviewsRef.current;
     const payload = makePayload(charts, meta.deletedChartIds, days, reviews);
-    let fileId = meta.fileId;
-    if (fileId) await updateFile(token, fileId, payload);
-    else fileId = await createFile(token, payload);
-    syncedChartsRef.current = charts;
-    syncedDaysRef.current = days;
-    syncedReviewsRef.current = reviews;
-    persist({ fileId, lastSyncAt: payload.savedAt });
-  }, [acquireToken, persist]);
+    const fileId = meta.fileId;
+    if (fileId) {
+      try {
+        await updateFile(token, fileId, payload);
+      } catch (e) {
+        if (e instanceof DriveError && e.status === 404) {
+          // The file is gone — deleted by another device's duplicate-file
+          // reconciliation (SPEC 20), or removed out of band. Re-uploading
+          // blind here would skip merging with whatever that device wrote to
+          // ITS file, so fall back to a full pull-merge-push instead of
+          // surfacing an error.
+          persist({ fileId: null });
+          await fullSync('');
+          return;
+        }
+        throw e;
+      }
+      syncedChartsRef.current = charts;
+      syncedDaysRef.current = days;
+      syncedReviewsRef.current = reviews;
+      persist({ fileId, lastSyncAt: payload.savedAt });
+    } else {
+      const created = await createFile(token, payload);
+      syncedChartsRef.current = charts;
+      syncedDaysRef.current = days;
+      syncedReviewsRef.current = reviews;
+      persist({ fileId: created, lastSyncAt: payload.savedAt });
+    }
+  }, [acquireToken, persist, fullSync]);
 
   // Run a sync operation with unified status + non-blocking error handling.
+  // Returns false when skipped because another op is already in flight (the
+  // caller may want to retry rather than silently drop the request), true
+  // otherwise — including when the op itself failed (that failure is already
+  // handled here via status/error, not something the caller should retry
+  // for).
   const run = useCallback(
-    async (op: () => Promise<void>, opts: { silentAuthOnly?: boolean } = {}) => {
-      if (runningRef.current) return;
+    async (op: () => Promise<void>, opts: { silentAuthOnly?: boolean } = {}): Promise<boolean> => {
+      if (runningRef.current) return false;
       runningRef.current = true;
       setStatus('syncing');
       setError(null);
@@ -272,6 +344,7 @@ function SyncController({ children }: { children: ReactNode }) {
       } finally {
         runningRef.current = false;
       }
+      return true;
     },
     [persist],
   );
@@ -329,6 +402,20 @@ function SyncController({ children }: { children: ReactNode }) {
   }, [run, fullSync]);
 
   // Debounced push on any local mutation while connected (charts OR journal).
+  //
+  // Two invariants fixed here (SPEC 20):
+  //   - NEVER push before this session has completed at least one merge. A
+  //     fresh load that lands in 'reconnect' (no cached token) still runs
+  //     this effect on every edit; blindly uploading local state without
+  //     ever having pulled+merged could overwrite remote edits it never saw.
+  //     `syncedChartsRef.current` is set only by a successful fullSync/push,
+  //     so `=== null` means "no merge yet this session" — substitute a full
+  //     sync for the plain push in that case.
+  //   - NEVER silently call GIS from this background timer. Only fire when a
+  //     still-unexpired token already exists (in memory or in stored
+  //     metadata); otherwise leave local edits unsynced (safe — they persist
+  //     locally and will sync on the next explicit connect/Sync now) and
+  //     land in 'reconnect' rather than risk a surprise sign-in popup.
   useEffect(() => {
     if (!loadSyncMeta().enabled) return;
     // Suppress the push caused by a merge writing back the same references we
@@ -341,15 +428,32 @@ function SyncController({ children }: { children: ReactNode }) {
       return;
     }
     if (pushTimer.current) clearTimeout(pushTimer.current);
-    pushTimer.current = setTimeout(() => {
+    const fire = () => {
       // Re-check at fire time: the user may have disconnected while we waited.
       if (!loadSyncMeta().enabled) return;
-      void run(push);
-    }, PUSH_DEBOUNCE_MS);
+      const meta = loadSyncMeta();
+      const mem = tokenRef.current;
+      const hasUsableToken =
+        (mem !== null && mem.expiresAt > Date.now()) ||
+        (meta.accessToken !== null && (meta.tokenExpiresAt ?? 0) > Date.now());
+      if (!hasUsableToken) {
+        setStatus('reconnect');
+        return;
+      }
+      const haveMergedThisSession = syncedChartsRef.current !== null;
+      const op = haveMergedThisSession ? push : () => fullSync('');
+      void run(op).then((ran) => {
+        // `run` returns false only when another op was already in flight —
+        // re-arm instead of dropping this edit on the floor (it would
+        // otherwise stay unsynced until the NEXT edit fires a new timer).
+        if (!ran) pushTimer.current = setTimeout(fire, PUSH_DEBOUNCE_MS);
+      });
+    };
+    pushTimer.current = setTimeout(fire, PUSH_DEBOUNCE_MS);
     return () => {
       if (pushTimer.current) clearTimeout(pushTimer.current);
     };
-  }, [state.charts, state.days, state.reviews, run, push]);
+  }, [state.charts, state.days, state.reviews, run, push, fullSync]);
 
   const view = useMemo<SyncView>(
     () => ({

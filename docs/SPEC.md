@@ -1166,3 +1166,130 @@ switches to `.cta-streak`'s translucent-white-on-accent treatment
 (`rgba(255, 255, 255, 0.25)`) on the active tab, so it reads as sitting
 "on" the accent fill rather than clashing with it — reusing the two
 existing count-pill idioms in the codebase rather than inventing a third.
+
+## 20. Sync hardening (v2.2)
+
+A real user hit sync divergence: their PC and phone both showed "synced"
+against the same Google account, yet held different chart data. Diagnosis
+found three independent root causes, all fixed together since they compound
+(any one of them can reintroduce the symptom even with the other two fixed).
+
+### 20.1 The divergence scenario
+
+1. A phone, offline or backgrounded for a while, checks off one habit — a
+   single-field edit — then syncs. Under whole-chart LWW (pre-v2.2), that
+   bumps `chart.updatedAt` to "now", making the phone's ENTIRE chart look
+   newer than the PC's, even though the PC has since made several real edits
+   (renamed actions, rewritten goals) that the phone never saw. The next
+   merge on the PC replaces its whole chart with the phone's stale copy,
+   silently discarding the PC's work. This is fixed by §20.2.
+2. Two devices, each finding no remote file yet, independently create their
+   own `visionsense.json` in `appDataFolder`. `findFile` used to return only
+   `files[0]`, and each device pins whatever it saw as `meta.fileId` forever
+   — so from then on every "sync" round-trips to a private file no other
+   device touches. Both devices report "synced"; neither's data ever reaches
+   the other. Fixed by §20.3.
+3. The debounced push effect fired on every local edit whenever `enabled`
+   was true, including a fresh page load sitting in `'reconnect'` state
+   (stale/missing token). A push in that state uploads local data WITHOUT
+   ever pulling and merging remote first — a stale device that silently
+   re-acquires a token mid-session could overwrite remote edits it never
+   even downloaded. Fixed by §20.4.
+
+### 20.2 Per-action merge (replaces whole-chart LWW for charts present on both sides)
+
+`Action` gains `updatedAt: string` (ISO; `''` when never stamped — sorts as
+epoch 0, the oldest possible value). Every operation in
+`src/model/operations.ts` that mutates a specific action's content (text,
+description, status/completedAt, habit, established, cue, reward,
+weeklyTarget, or a habit check-in) stamps that action's `updatedAt` with the
+same instant it bumps `chart.updatedAt` — both stamps come from a single
+`now()` call in the shared `replaceAction` helper so they can never drift
+apart. Chart-level-only ops (goal, theme, pillar rename/color) and pure
+reorders (`swapPillars`/`swapActions`) do **not** stamp any action —
+reordering doesn't change an action's content, so its history stays
+attributed to whoever last edited it.
+
+`mergeSides` (`src/sync/merge.ts`) still unions charts present on only one
+side unchanged. For a chart id present on **both** sides, it now merges
+structurally instead of picking one whole chart:
+
+| Layer | Winner rule |
+|---|---|
+| Chart-level fields (goal, themeId, templateId, createdAt, pillar names/colors) | The side with strictly newer `chart.updatedAt`; ties keep local. |
+| Merged `chart.updatedAt` | `max(local.updatedAt, remote.updatedAt)`. |
+| Action scalar fields (text, description, status, completedAt, habit, established, cue, reward, weeklyTarget, id) | Per position (8×8 fixed grid), the side with strictly newer `action.updatedAt`; ties keep local; `''` always loses to any real stamp. |
+| Merged `action.updatedAt` | Whichever stamp won the scalar fields above. |
+| `action.completions` | **Always the UNION of both sides**, deduped and sorted ascending — regardless of which side won the scalars. Check-ins are an append-mostly set; a union never loses one. |
+| Action id mismatch at a position | Defensive-only (shouldn't happen for charts sharing an id): keep the chart-level winner's action unchanged. |
+
+Tombstones, pruning, and the "chart present on only one side" union are
+unchanged from §10.3. The merge stays a pure function (`now` injectable) and
+idempotent under re-merge — covered in `merge.test.ts`.
+
+### 20.3 Duplicate-file reconciliation
+
+`src/sync/drive.ts` gains `listFiles(token)` (same query as the old
+`findFile`, but returns every match with `id` + `createdTime`, not just
+`files[0]`) and `deleteFile(token, fileId)` (DELETE; a 404 is treated as
+success — the `drive.appdata` scope permits deleting the app's own files).
+`findFile` is now a thin single-result wrapper over `listFiles` kept for
+compatibility.
+
+`fullSync` in `src/sync/controller.tsx` lists every match, downloads and
+parses each one (plus a stale `meta.fileId` if it isn't in the listing — a
+404 there just means it's really gone), and folds them pairwise into one
+remote side with `mergeSides`/`mergeJournals` before merging with local. The
+**canonical file** is the listed file with the oldest `createdTime` (ties
+broken by the lexicographically smaller id) — a pure, order-independent rule
+(`canonicalFile` in `controller.tsx`) so every device reconciling the same
+duplicate set converges on the same file without coordinating. The merged
+payload is written to the canonical file; every other duplicate is
+best-effort deleted (an individual delete failure is swallowed — it gets
+cleaned up on the next sync). `fileId` in sync metadata is persisted as the
+canonical id. If no file exists at all, one is created (unchanged from
+§10.3).
+
+The debounced `push` also now handles the file having vanished out from
+under it: if `updateFile` throws a 404 (the file was deleted by another
+device's reconciliation, or removed out of band), `push` clears the stored
+`fileId` and falls back to a full pull-merge-push instead of surfacing an
+error or blindly re-creating a file that skips the merge.
+
+### 20.4 No push before merge; no silent background auth
+
+Two invariants added to the debounced-push effect in `controller.tsx`:
+
+- **Never push before this session has completed a merge.** A ref that is
+  non-null only after a successful `fullSync` (or `push`) — `syncedChartsRef`
+  — is checked at fire time; if no merge has happened yet this session, the
+  effect runs `fullSync('')` instead of a plain `push`, so local edits made
+  before the app ever pulled remote data get merged, not uploaded blind.
+- **Never call GIS from this background timer.** At fire time, the effect
+  checks for an unexpired token already in memory or in stored sync
+  metadata. If neither exists, it does **not** request one — it leaves the
+  app in `'reconnect'` and returns. Local edits stay safely persisted
+  locally and sync on the next explicit connect/Sync now (a user gesture,
+  which GIS is allowed to satisfy with a popup if needed). This closes the
+  same class of surprise-popup risk as the load-time fix in §10.6, but for
+  every subsequent edit during a session, not just the initial load.
+
+A related latent bug is also fixed: `run()` returned early (silently
+dropping the request) whenever another sync op was already in flight — so a
+debounced push that fired while the load-time `fullSync` was still running
+was discarded, and the edit stayed unsynced until the *next* edit created a
+new timer. `run()` now returns a boolean (`false` only for this busy-skip
+case); the debounced effect's fire callback re-arms itself with the same 2s
+delay when it sees `false`, instead of dropping the request.
+
+### 20.5 Backward compatibility
+
+`schemaVersion` stays 1. `Action.updatedAt` is additive: validation
+(`src/model/storage.ts`) keeps it when present as a string, else defaults to
+`''`, exactly like the `weeklyTarget` precedent (§12.5) — old localStorage
+blobs, old exports, and old Drive files all load unchanged. A chart merged
+against a pre-v2.2 side (all actions stamped `''`) degrades gracefully to
+the old chart-level LWW behavior in practice, since every action on that
+side loses every scalar-field comparison to any side with a real stamp —
+but completions still union correctly either way, so no habit history is
+lost even against ungraded peers.

@@ -54,12 +54,24 @@ async function toDriveError(res: Response): Promise<DriveError> {
   return new DriveError(res.status, `Drive request failed (${res.status}). ${detail}`.trim());
 }
 
-/** Look up the id of `visionsense.json` in appDataFolder, or null if absent. */
-export async function findFile(token: string): Promise<string | null> {
+/** One `visionsense.json` match in appDataFolder. */
+export interface DriveFileRef {
+  id: string;
+  createdTime: string;
+}
+
+/**
+ * List every `visionsense.json` match in appDataFolder (SPEC 20 duplicate-file
+ * reconciliation). There should be exactly one, but a race between two devices
+ * both creating the file with no remote copy yet can leave two — this is the
+ * root cause of the "both show synced, data never converges" bug, since each
+ * device would otherwise pin whichever one it saw first.
+ */
+export async function listFiles(token: string): Promise<DriveFileRef[]> {
   const params = new URLSearchParams({
     spaces: 'appDataFolder',
     q: `name = '${DRIVE_FILE_NAME}' and trashed = false`,
-    fields: 'files(id,name,modifiedTime)',
+    fields: 'files(id,name,createdTime)',
     pageSize: '10',
   });
   const res = await fetch(`${DRIVE_FILES}?${params.toString()}`, {
@@ -69,10 +81,30 @@ export async function findFile(token: string): Promise<string | null> {
   const data: unknown = await res.json();
   const files =
     typeof data === 'object' && data !== null && Array.isArray((data as { files?: unknown }).files)
-      ? ((data as { files: Array<{ id?: unknown }> }).files ?? [])
+      ? ((data as { files: Array<{ id?: unknown; createdTime?: unknown }> }).files ?? [])
       : [];
-  const first = files[0];
-  return first && typeof first.id === 'string' ? first.id : null;
+  const out: DriveFileRef[] = [];
+  for (const f of files) {
+    if (typeof f.id === 'string' && typeof f.createdTime === 'string') {
+      out.push({ id: f.id, createdTime: f.createdTime });
+    }
+  }
+  return out;
+}
+
+/** Look up the id of `visionsense.json` in appDataFolder, or null if absent. */
+export async function findFile(token: string): Promise<string | null> {
+  const files = await listFiles(token);
+  return files[0]?.id ?? null;
+}
+
+/** Delete a Drive file by id. A 404 (already gone) is treated as success. */
+export async function deleteFile(token: string, fileId: string): Promise<void> {
+  const res = await fetch(`${DRIVE_FILES}/${encodeURIComponent(fileId)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 404) throw await toDriveError(res);
 }
 
 /** Download and JSON-parse the media body of a Drive file. */

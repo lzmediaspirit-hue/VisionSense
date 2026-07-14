@@ -256,6 +256,70 @@ describe('operations', () => {
     expect(swapPillars(chart, 2, 2, CLOCK)).toBe(chart);
   });
 
+  // --- Per-action sync stamp (v2.2, SPEC 20) ---------------------------------
+
+  it('content-mutating ops stamp the touched action.updatedAt, not other actions', () => {
+    let chart = createChart();
+    expect(chart.pillars[0].actions[0].updatedAt).toBe('');
+    chart = setActionText(chart, 0, 0, 'Run', CLOCK);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe(CLOCK());
+    // A sibling action untouched by the mutation keeps its '' stamp.
+    expect(chart.pillars[0].actions[1].updatedAt).toBe('');
+  });
+
+  it('setActionDetails, setActionStatus, cycleActionStatus, habit ops, and cadence all stamp the action', () => {
+    let chart = createChart();
+    chart = setActionText(chart, 0, 0, 'Meditate', CLOCK);
+    const AFTER = () => '2021-06-06T01:00:00.000Z';
+
+    chart = setActionDetails(chart, 0, 0, { description: 'x' }, AFTER);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe(AFTER());
+
+    chart = setActionStatus(chart, 0, 0, 'doing', CLOCK);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe(CLOCK());
+
+    chart = cycleActionStatus(chart, 0, 0, AFTER);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe(AFTER());
+
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe(CLOCK());
+
+    chart = setActionEstablished(chart, 0, 0, true, AFTER);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe(AFTER());
+
+    chart = toggleHabitToday(chart, 0, 0, CLOCK);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe(CLOCK());
+
+    chart = setActionCadence(chart, 0, 0, 3, AFTER);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe(AFTER());
+  });
+
+  it('no-op action mutations do not stamp updatedAt', () => {
+    const chart = createChart();
+    expect(setActionText(chart, 0, 0, '', CLOCK).pillars[0].actions[0].updatedAt).toBe('');
+  });
+
+  it('chart-level-only ops (goal/theme/pillar rename) do not stamp any action', () => {
+    let chart = createChart();
+    chart = setGoal(chart, 'New goal', CLOCK);
+    chart = renamePillar(chart, 0, 'Pillar A', CLOCK);
+    for (const pillar of chart.pillars) {
+      for (const action of pillar.actions) {
+        expect(action.updatedAt).toBe('');
+      }
+    }
+  });
+
+  it('swapActions/swapPillars reposition actions without re-stamping them', () => {
+    let chart = createChart();
+    chart = setActionText(chart, 0, 0, 'first', CLOCK);
+    const stampedAt = chart.pillars[0].actions[0].updatedAt;
+    chart = swapActions(chart, 0, 0, 1, CLOCK);
+    // The stamped action moved to index 1 but keeps its original stamp.
+    expect(chart.pillars[0].actions[1].updatedAt).toBe(stampedAt);
+    expect(chart.pillars[0].actions[0].updatedAt).toBe('');
+  });
+
   it('swapActions reorders within a pillar', () => {
     let chart = createChart();
     chart = setActionText(chart, 0, 0, 'first', CLOCK);

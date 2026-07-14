@@ -52,6 +52,14 @@ export function renamePillar(
   return touch({ ...chart, pillars }, now);
 }
 
+/**
+ * The single "update one action" helper every content-mutating op below
+ * routes through. Stamps BOTH the action's own `updatedAt` and the chart's
+ * `updatedAt` with the same instant (v2.2, SPEC 20) — one `now()` call so the
+ * two stamps can never drift apart. Reorder-only ops (swapPillars/
+ * swapActions) and chart-level-only ops (setGoal/setTheme/renamePillar) call
+ * `touch` directly instead and deliberately leave action stamps untouched.
+ */
 function replaceAction(
   chart: Chart,
   pillarIndex: number,
@@ -59,12 +67,13 @@ function replaceAction(
   next: Action,
   now: Clock,
 ): Chart {
+  const ts = now();
   const pillar = chart.pillars[pillarIndex];
   const actions = pillar.actions.slice();
-  actions[actionIndex] = next;
+  actions[actionIndex] = { ...next, updatedAt: ts };
   const pillars = chart.pillars.slice();
   pillars[pillarIndex] = { ...pillar, actions };
-  return touch({ ...chart, pillars }, now);
+  return { ...chart, pillars, updatedAt: ts };
 }
 
 /** Set an action's text. */
