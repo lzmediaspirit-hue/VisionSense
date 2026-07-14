@@ -10,6 +10,7 @@ import {
   localDayKey,
   localMonthKey,
   monthlyBuckets,
+  pillarActivity,
   stepMonth,
   yearlyBuckets,
 } from './completions';
@@ -17,6 +18,7 @@ import { createChart } from './factory';
 import {
   setActionEstablished,
   setActionHabit,
+  setActionStatus,
   setActionText,
   toggleHabitToday,
 } from './operations';
@@ -283,5 +285,69 @@ describe('calendar month (v1.2)', () => {
   it('stepMonth normalizes year/month overflow both directions', () => {
     expect(stepMonth(2024, 11, 1)).toEqual({ year: 2025, month: 0 });
     expect(stepMonth(2024, 0, -1)).toEqual({ year: 2023, month: 11 });
+  });
+});
+
+describe('pillar activity (v2.3, scatter tab)', () => {
+  const NOW = new Date(2024, 5, 15, 12, 0); // local Jun 15 2024
+
+  /** A chart with one event per entry, on the given pillar/action/date. */
+  function chartWithEvents(
+    entries: Array<{ pillar: number; action: number; date: Date; habit?: boolean }>,
+  ): Chart {
+    let chart = createChart();
+    for (const e of entries) {
+      chart = setActionText(chart, e.pillar, e.action, 'x', CLOCK);
+      if (e.habit) {
+        chart = setActionHabit(chart, e.pillar, e.action, true, CLOCK);
+        chart = toggleHabitToday(chart, e.pillar, e.action, () => e.date.toISOString());
+      } else {
+        chart = setActionStatus(chart, e.pillar, e.action, 'done', () => e.date.toISOString());
+      }
+    }
+    return chart;
+  }
+
+  it('counts both habit check-ins and completed tasks as events, tagged by pillar', () => {
+    const chart = chartWithEvents([
+      { pillar: 0, action: 0, date: new Date(2024, 5, 10, 9, 0), habit: true },
+      { pillar: 1, action: 0, date: new Date(2024, 5, 10, 9, 0) },
+    ]);
+    const points = pillarActivity(chart, NOW, 90);
+    const p0 = points.find((p) => p.pillarIndex === 0 && p.dayKey === '2024-06-10');
+    const p1 = points.find((p) => p.pillarIndex === 1 && p.dayKey === '2024-06-10');
+    expect(p0).toMatchObject({ count: 1, fullLabel: 'Jun 10' });
+    expect(p1).toMatchObject({ count: 1, fullLabel: 'Jun 10' });
+  });
+
+  it('excludes events outside the window', () => {
+    const chart = chartWithEvents([{ pillar: 0, action: 0, date: new Date(2024, 2, 1, 9, 0) }]);
+    expect(pillarActivity(chart, NOW, 90)).toHaveLength(0);
+  });
+
+  it('aggregates same-day, same-pillar events (from different actions) into one count', () => {
+    const chart = chartWithEvents([
+      { pillar: 0, action: 0, date: new Date(2024, 5, 10, 8, 0) },
+      { pillar: 0, action: 1, date: new Date(2024, 5, 10, 20, 0) },
+    ]);
+    const points = pillarActivity(chart, NOW, 90);
+    expect(points).toHaveLength(1);
+    expect(points[0]).toMatchObject({ pillarIndex: 0, dayKey: '2024-06-10', count: 2 });
+  });
+
+  it('pins the window boundary: exactly `days` days ago is excluded, `days - 1` days ago is the oldest included day', () => {
+    const chart = chartWithEvents([
+      { pillar: 0, action: 0, date: new Date(2024, 5, 15 - 90, 9, 0) }, // 90 days ago: excluded
+      { pillar: 0, action: 1, date: new Date(2024, 5, 15 - 89, 9, 0) }, // 89 days ago: included, offset 0
+    ]);
+    const points = pillarActivity(chart, NOW, 90);
+    expect(points).toHaveLength(1);
+    expect(points[0].dayOffset).toBe(0);
+  });
+
+  it("`now`'s own day has dayOffset days-1 (the newest day in the window)", () => {
+    const chart = chartWithEvents([{ pillar: 3, action: 0, date: NOW }]);
+    const points = pillarActivity(chart, NOW, 90);
+    expect(points[0]).toMatchObject({ dayOffset: 89, pillarIndex: 3, dayKey: '2024-06-15' });
   });
 });

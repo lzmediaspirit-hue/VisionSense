@@ -1293,3 +1293,122 @@ the old chart-level LWW behavior in practice, since every action on that
 side loses every scalar-field comparison to any side with a real stamp —
 but completions still union correctly either way, so no habit history is
 lost even against ungraded peers.
+
+## 21. Progress radar & scatter (v2.3)
+
+Two more tabs join the Progress dialog's Daily/Monthly/Yearly bar charts and
+Calendar: a **Radar** ("Pillar balance") and a **Scatter** ("Activity") view.
+Both are pure, unit-tested data helpers plus hand-rolled SVG rendering — no
+chart library, matching the existing `BarChart`/`CalendarView` pattern
+(viewBox SVG, `<title>` tooltips, a `figcaption`, and a visually-hidden data
+table as the accessible text alternative). Purely presentational: no new
+persisted state, `schemaVersion` stays 1.
+
+### 21.1 Radar data: `pillarRadar`
+
+`pillarRadar(chart): Array<{ name, filled, done }>` (`src/model/progress.ts`)
+returns one entry per pillar, in chart order. `filled`/`done` are exactly
+`pillarProgress`'s counts (0..8) — reusing `isActionFilled`/`isActionDone` so
+the radar's semantics never drift from the bar chart's or the strip's: a task
+is done at `status === 'done'`; a habit is done only when `established`,
+regardless of its (ignored) stored status. `name` is `pillar.name.trim()`,
+falling back to `'Pillar N'` (1-based) for an unnamed pillar — the same
+fallback used elsewhere (BlockView, TodayView).
+
+### 21.2 Scatter data: `pillarActivity`
+
+`pillarActivity(chart, now?, days = 90): Array<{ dayKey, dayOffset,
+pillarIndex, count, fullLabel }>` (`src/model/completions.ts`) buckets every
+completion **event** — a habit check-in (`completions` entry) or a task
+`completedAt` — into (local day, pillar) pairs over the trailing `days`-day
+window ending on `now`, local calendar days throughout (same TIMEZONE
+convention as the rest of the module). Event extraction is centralized in a
+new `collectPillarEvents(chart): Array<{ date, pillarIndex }>`, which
+`collectCompletions` now delegates to (pillar identity discarded) — so the
+Scatter tab's events can never drift from the bar chart / calendar's, since
+both trace back to the same walk of the chart. Only (day, pillar) pairs with
+`count >= 1` are returned; there is nothing to plot at zero.
+
+The window matches `dailyBuckets`'s convention exactly (`dayAtOffset(now,
+days, offset)`, shared by both): the oldest day is `now` minus `days - 1`
+(`dayOffset` 0), `now`'s own day is `dayOffset = days - 1`; a day exactly
+`days` ago falls outside the window and is excluded. `fullLabel` reuses the
+new `shortDayLabel` helper (e.g. `'Jul 14'`, no year) that `dailyBuckets`'s
+axis label now also calls, so the two tabs' date formatting can't diverge.
+
+### 21.3 Rendering — shared rules
+
+Both charts inherit the chart's theme via the existing CSS custom properties
+only (`--accent`, `--text-muted`, `--text-faint`, `--surface`,
+`--pillar-color-N`) — never a hardcoded color — so they read correctly in all
+four themes. Grid lines, axes, and guides are **recessive**: the same faint
+`var(--border-strong)` 1px stroke treatment as `.barchart__axis`, never
+competing with the data marks. Every mark (radar vertex, scatter dot) is
+**>= 8px in diameter** with a 2px `var(--surface)` stroke ring, so adjacent or
+overlapping marks stay visually separated against the surface behind them.
+Text — axis labels, row labels, legend copy, captions — is always a text
+token (`--text-muted`/`--text-faint`), never a series color, so it stays
+legible regardless of which series happen to be present. `bucketsFor` is
+guarded to never run for the `radar`/`scatter`/`calendar` tabs (mirroring how
+`calendar` was already excluded) since each owns its own data shape.
+
+### 21.4 Radar rendering
+
+`RadarChart` draws a square `preserveAspectRatio="xMidYMid meet"` SVG (a
+radar must never anisotropically squash, unlike the bar chart's
+`preserveAspectRatio="none"`, which is fine for a rectangular bar grid but
+would distort a radar's angles). Eight spokes start at 12 o'clock and run
+clockwise in pillar order; four recessive grid rings mark 25/50/75/100% (2,
+4, 6, 8 of 8). Two series share the fixed 0..8 axis max (`RULE_OF_8`, never
+0), so every coordinate is division-by-a-constant and stays finite even for
+an all-zero chart, which just collapses both polygons to the center — no
+NaN, no crash:
+- **Filled**: no fill, a dashed `var(--text-faint)` 2px stroke — the muted,
+  "planned" outline.
+- **Done**: `var(--accent)` 2px stroke, `fill-opacity: 0.18` — the
+  "executed" fill. Its vertices carry visible marker circles (the bar-chart-
+  style `<title>` tooltip: `"PillarName: X of 8 done, Y filled"`).
+
+Two series on one chart means a legend is **required** for series identity —
+a small row under the figure pairs a dashed swatch with "Filled" and a solid
+accent swatch with "Done". Axis labels (pillar names, truncated to ~12 chars
++ ellipsis) sit just outside the outer ring with `text-anchor` chosen by each
+axis's angle (`start` on the right half, `end` on the left half, `middle`
+near top/bottom) so label text always extends away from the chart, never
+overlapping it.
+
+### 21.5 Scatter rendering
+
+`ScatterChart` draws a wide SVG (default `preserveAspectRatio`, since a time
+axis has no "aspect" to preserve): 8 evenly spaced rows in pillar order (row
+label = pillar name truncated to ~10 chars, plus a recessive per-row guide
+line), and a bottom time axis with ~6 date ticks spaced evenly across the
+90-day window. A dot at `(day, pillar row)` marks every (day, pillar) with
+events; radius is `min(9, 4 * sqrt(count))` — area roughly proportional to
+count, base 4 units at count 1, capped near 9. Dot fill is that pillar's own
+color (`pillar.color`, already a `var(--pillar-color-N)` reference, used
+directly as the inline fill exactly as `ChartThumb` does with the same
+field) — but this is **redundant reinforcement, not the identity channel**:
+row position + row label already disambiguate the pillar unambiguously, so
+(unlike the radar) **no legend is added** — a color-only legend for 8
+already-labeled rows would be pure noise. A very faint vertical guide marks
+today's column. Each dot's tooltip: `"PillarName — Jul 14: 3 events"`.
+
+With zero events in the window, the SVG is replaced by the same dashed-box
+empty-state copy style already used by Today/Review
+(`.today__empty`/`.review__empty`, extended to `.scatter__empty`): *"No
+activity in the last 90 days. Habit check-ins and completed actions will
+appear here."*
+
+### 21.6 Layout: six tabs, 375px
+
+Adding two tabs (six total) no longer fits the Progress dialog's tab pill at
+a 375px viewport. `.progress-tabs` changes from a shrinking `inline-flex` to
+a `flex` row with `overflow-x: auto` (scrollbar hidden, `flex: 0 0 auto` +
+`white-space: nowrap` per tab) — the same pattern already used by
+`.today__tabs` for the chart-tabs bar (§19) — so the tab strip scrolls
+within its own pill instead of squeezing tab labels unreadable or silently
+clipping the later tabs off-modal. This was verified to keep the hard
+375px-no-page-scroll rule intact (`document.documentElement.scrollWidth`
+never exceeds `clientWidth`) while every tab, including Scatter and
+Calendar, stays reachable and clickable.
