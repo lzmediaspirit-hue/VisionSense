@@ -316,12 +316,18 @@ function BarChart({
 
 // --- Radar tab (v2.3, SPEC 21) -----------------------------------------------
 
-const RADAR_VB_W = 360;
-const RADAR_VB_H = 320;
-const RADAR_CX = 180;
-const RADAR_CY = 150;
+// The viewBox is cropped tight around the chart + its label ring (v2.3.1):
+// with the old 360x320 box and a lot of unclaimed margin, `preserveAspectRatio`
+// scaled the whole SVG down to fit the panel's fixed CSS height, which shrank
+// the in-SVG label text well under readable size on a phone. Cropping the
+// viewBox to the actual content (see docs/SPEC.md §21) lets the SVG scale by
+// container *width* instead, so a larger user-unit font actually renders larger.
+const RADAR_VB_W = 408;
+const RADAR_VB_H = 242;
+const RADAR_CX = 204;
+const RADAR_CY = 122;
 const RADAR_R = 88; // radius of the outer (8/8) ring
-const RADAR_LABEL_R = 106; // radius of the axis-label ring, just outside the grid
+const RADAR_LABEL_R = 100; // radius of the axis-label ring, just outside the grid
 const RADAR_RINGS = [2, 4, 6, 8]; // 25/50/75/100%
 
 /** Angle (radians) of axis `i` of `count`, starting at 12 o'clock, going clockwise. */
@@ -362,6 +368,7 @@ function RadarChart({ data }: { data: PillarRadarPoint[] }) {
         className="radar__svg"
         viewBox={`0 0 ${RADAR_VB_W} ${RADAR_VB_H}`}
         preserveAspectRatio="xMidYMid meet"
+        style={{ aspectRatio: `${RADAR_VB_W} / ${RADAR_VB_H}` }}
         role="img"
         aria-label={`Pillar balance. ${totalDone} of ${totalFilled} planned actions done, across ${n} pillars.`}
       >
@@ -407,7 +414,7 @@ function RadarChart({ data }: { data: PillarRadarPoint[] }) {
               textAnchor={anchor}
               className="radar__label"
             >
-              {truncateLabel(p.name)}
+              {truncateLabel(p.name, 10)}
             </text>
           );
         })}
@@ -453,15 +460,30 @@ function RadarChart({ data }: { data: PillarRadarPoint[] }) {
   );
 }
 
-// --- Scatter tab (v2.3, SPEC 21) ---------------------------------------------
+// --- Scatter tab (v2.3, SPEC 21; restructured in v2.3.1) ---------------------
 
+// v2.3.1: the row labels and date-tick labels used to be <text> baked into the
+// SVG, sized in user units. Because the SVG is scaled by `preserveAspectRatio`
+// to fit the panel, that text shrank along with the plot on a narrow phone.
+// They're now real HTML elements laid out alongside/under the SVG (CSS px, so
+// they never shrink below their declared size — see docs/SPEC.md §21), and the
+// SVG's padding shrinks to just enough room to keep dots from clipping at the
+// edges — no more left/bottom gutters reserved for text.
 const SCATTER_VB_W = 640;
-const SCATTER_VB_H = 260;
-const SCATTER_PAD_L = 72;
-const SCATTER_PAD_R = 10;
+// Tall enough that even at the narrowest supported width (375px, where the
+// plot column is ~212px) each of the 8 pillar rows gets enough real screen
+// height to clear its ~14px-tall HTML label without the rows colliding —
+// see docs/SPEC.md §21. Because `.scatter__svg`'s CSS aspect-ratio is locked
+// to this exact ratio (see its `style` prop below), scale_x always equals
+// scale_y, so this taller box doesn't distort the (circular) dots.
+const SCATTER_VB_H = 460;
+const SCATTER_PAD_L = 12;
+const SCATTER_PAD_R = 12;
 const SCATTER_PAD_T = 10;
-const SCATTER_PAD_B = 26;
-const SCATTER_TICKS = 6;
+const SCATTER_PAD_B = 10;
+// 4, not 6: with real (non-shrinking) HTML px text, 6 evenly-spaced date
+// labels collide with each other in the ~212px-wide plot column at 375px.
+const SCATTER_TICKS = 4;
 
 /** Dot radius: base 4 for count 1, area (~r^2) scales with count, capped at 9. */
 function scatterRadius(count: number): number {
@@ -515,70 +537,104 @@ function ScatterChart({
 
   return (
     <figure className="scatter">
-      <svg
-        className="scatter__svg"
-        viewBox={`0 0 ${SCATTER_VB_W} ${SCATTER_VB_H}`}
-        role="img"
-        aria-label={`Activity, last ${days} days. ${totalEvents} completion event${
-          totalEvents === 1 ? '' : 's'
-        } shown.`}
-      >
-        {/* Today's column: a very faint vertical guide. */}
-        <line
-          x1={dayX(todayOffset)}
-          y1={SCATTER_PAD_T}
-          x2={dayX(todayOffset)}
-          y2={baselineY}
-          className="scatter__today"
-        />
+      <div className="scatter__body">
+        {/* Row labels live in HTML now (v2.3.1) so their font-size is real CSS
+            px, immune to the SVG's viewBox scaling. Positioned by percentage
+            against the same VB_H the SVG rows use, so they track exactly. */}
+        <div className="scatter__rows" aria-hidden="true">
+          {names.map((name, i) => (
+            <span
+              key={name + i}
+              className="scatter__rowlabel"
+              style={{ top: `${(rowY(i) / SCATTER_VB_H) * 100}%` }}
+              title={name}
+            >
+              {truncateLabel(name, 10)}
+            </span>
+          ))}
+        </div>
 
-        {/* One faint horizontal guide per pillar row, plus its label. */}
-        {names.map((name, i) => (
-          <g key={name + i}>
+        <div className="scatter__plotwrap">
+          <svg
+            className="scatter__svg"
+            viewBox={`0 0 ${SCATTER_VB_W} ${SCATTER_VB_H}`}
+            style={{ aspectRatio: `${SCATTER_VB_W} / ${SCATTER_VB_H}` }}
+            role="img"
+            aria-label={`Activity, last ${days} days. ${totalEvents} completion event${
+              totalEvents === 1 ? '' : 's'
+            } shown.`}
+          >
+            {/* Today's column: a very faint vertical guide. */}
+            <line
+              x1={dayX(todayOffset)}
+              y1={SCATTER_PAD_T}
+              x2={dayX(todayOffset)}
+              y2={baselineY}
+              className="scatter__today"
+            />
+
+            {/* One faint horizontal guide per pillar row. */}
+            {names.map((name, i) => (
+              <line
+                key={name + i}
+                x1={SCATTER_PAD_L}
+                y1={rowY(i)}
+                x2={SCATTER_VB_W - SCATTER_PAD_R}
+                y2={rowY(i)}
+                className="scatter__axis"
+              />
+            ))}
+
+            {/* Recessive x-axis baseline. */}
             <line
               x1={SCATTER_PAD_L}
-              y1={rowY(i)}
+              y1={baselineY}
               x2={SCATTER_VB_W - SCATTER_PAD_R}
-              y2={rowY(i)}
+              y2={baselineY}
               className="scatter__axis"
             />
-            <text x={SCATTER_PAD_L - 8} y={rowY(i) + 3} textAnchor="end" className="scatter__rowlabel">
-              {truncateLabel(name, 10)}
-            </text>
-          </g>
-        ))}
 
-        {/* Recessive x-axis baseline + date ticks. */}
-        <line x1={SCATTER_PAD_L} y1={baselineY} x2={SCATTER_VB_W - SCATTER_PAD_R} y2={baselineY} className="scatter__axis" />
-        {ticks.map((t) => (
-          <text
-            key={t.offset}
-            x={dayX(t.offset)}
-            y={SCATTER_VB_H - 8}
-            textAnchor="middle"
-            className="scatter__label"
-          >
-            {t.label}
-          </text>
-        ))}
+            {points.map((pt) => {
+              const pillar = pillars[pt.pillarIndex];
+              const name = names[pt.pillarIndex];
+              return (
+                <circle
+                  key={`${pt.dayOffset}-${pt.pillarIndex}`}
+                  cx={dayX(pt.dayOffset)}
+                  cy={rowY(pt.pillarIndex)}
+                  r={scatterRadius(pt.count)}
+                  className="scatter__dot"
+                  style={{ fill: pillar.color }}
+                >
+                  <title>{`${name} — ${pt.fullLabel}: ${pt.count} event${pt.count === 1 ? '' : 's'}`}</title>
+                </circle>
+              );
+            })}
+          </svg>
+        </div>
 
-        {points.map((pt) => {
-          const pillar = pillars[pt.pillarIndex];
-          const name = names[pt.pillarIndex];
-          return (
-            <circle
-              key={`${pt.dayOffset}-${pt.pillarIndex}`}
-              cx={dayX(pt.dayOffset)}
-              cy={rowY(pt.pillarIndex)}
-              r={scatterRadius(pt.count)}
-              className="scatter__dot"
-              style={{ fill: pillar.color }}
+        {/* Empty grid cell under the row-label column. */}
+        <div aria-hidden="true" />
+
+        {/* Date ticks, also HTML (v2.3.1) — positioned by the same percentage
+            math as the SVG's dayX(), so they line up with the plot exactly.
+            A separate grid row from the SVG so its height never leaks into
+            the row-label column's stretch height (which must match the SVG
+            alone for the row labels to align with the SVG's guide lines). */}
+        <div className="scatter__ticks" aria-hidden="true">
+          {ticks.map((t, k) => (
+            <span
+              key={t.offset}
+              className={`scatter__ticklabel ${
+                k === 0 ? 'scatter__ticklabel--first' : k === ticks.length - 1 ? 'scatter__ticklabel--last' : ''
+              }`.trim()}
+              style={{ left: `${(dayX(t.offset) / SCATTER_VB_W) * 100}%` }}
             >
-              <title>{`${name} — ${pt.fullLabel}: ${pt.count} event${pt.count === 1 ? '' : 's'}`}</title>
-            </circle>
-          );
-        })}
-      </svg>
+              {t.label}
+            </span>
+          ))}
+        </div>
+      </div>
 
       <figcaption className="scatter__caption">
         Each dot is a day's completions in that pillar — bigger dot, more events. Last {days} days.
