@@ -1412,3 +1412,36 @@ clipping the later tabs off-modal. This was verified to keep the hard
 375px-no-page-scroll rule intact (`document.documentElement.scrollWidth`
 never exceeds `clientWidth`) while every tab, including Scatter and
 Calendar, stays reachable and clickable.
+
+### 21.7 v2.3.1: readable text at every width
+
+v2.3 sized Radar/Scatter text in SVG user units, so it scaled down with the
+SVG's `viewBox`-to-container ratio — worst on a narrow phone, where the
+scatter shrank to roughly half scale and its labels became unreadable. The
+fix establishes a **rendered-size floor**, measured in real device pixels
+(`getBoundingClientRect()`/computed `font-size`, not user units): **>= 12px
+at a 1280px-wide desktop, >= 11px at a 375px-wide phone**, for every visible
+label, legend entry, and figcaption in both charts, with no label overlap or
+clipping at either width.
+
+- **Scatter**: row labels and date-tick labels moved **out of the SVG
+  entirely** into real HTML (`.scatter__rowlabel`, `.scatter__ticklabel`),
+  positioned by percentage against the SVG's own `viewBox` fractions so they
+  track the plot exactly. HTML text uses plain CSS `font-size` (`--fs-cell`),
+  which never shrinks with the SVG's scale — the fix in one sentence. The SVG
+  itself keeps only the guide lines, today line, and dots, with padding
+  trimmed to just the dot-radius clearance (no more left/bottom gutters
+  reserved for text). Its `viewBox` height was also increased so the 8 pillar
+  rows have enough real screen height for their HTML labels to clear each
+  other at 375px; `.scatter__svg`'s CSS `aspect-ratio` is locked to that exact
+  `viewBox` ratio so the scale stays uniform (no elliptical dots).
+- **Radar**: labels stay in-SVG (they sit around a circle, which doesn't
+  translate to an HTML layout as cleanly), but the `viewBox` was cropped tight
+  around the chart and its label ring, font bumped to 15 user units, and
+  truncation shortened to ~10 characters. Critically, `.radar__svg` switched
+  from a fixed CSS `height` to `aspect-ratio` (matching the `viewBox`) — the
+  fixed height was fighting `preserveAspectRatio`'s "meet" fit and silently
+  scaling the whole chart (font included) down to whatever the height allowed,
+  regardless of how wide the panel actually was.
+- Legend and figcaption text (already HTML) were bumped from `--fs-meta`
+  (11.52px, under the floor) to `--fs-cell` (12.48px).

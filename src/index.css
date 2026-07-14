@@ -884,13 +884,18 @@ select.field__input {
 }
 
 /* --------------------------------------------- radar chart (v2.3, 21) */
+/* v2.3.1 (SPEC 21): the viewBox is cropped tight around the chart + labels
+ * and sized via `aspect-ratio` (set inline, matching the viewBox) instead of
+ * a fixed CSS height, so the SVG scales by container *width* — the old fixed
+ * height fought `preserveAspectRatio`'s "meet" fit and silently shrank
+ * everything, including the label font, well below readable size on a phone. */
 .radar {
   margin: 0;
 }
 .radar__svg {
   display: block;
   width: 100%;
-  height: 220px;
+  height: auto;
   overflow: visible;
 }
 .radar__grid {
@@ -919,7 +924,7 @@ select.field__input {
 }
 .radar__label {
   fill: var(--text-muted);
-  font-size: 9px;
+  font-size: 15px;
   font-family: var(--font-sans);
 }
 .radar__legend {
@@ -932,7 +937,7 @@ select.field__input {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-cell);
   color: var(--text-muted);
 }
 .radar__swatch--filled {
@@ -946,19 +951,53 @@ select.field__input {
 }
 .radar__caption {
   margin-top: 0.5rem;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-cell);
   color: var(--text-muted);
   text-align: center;
 }
 
 /* -------------------------------------------- scatter plot (v2.3, 21) */
+/* v2.3.1 (SPEC 21): row labels and date ticks moved OUT of the SVG into real
+ * HTML (see ProgressDialog's ScatterChart) so their font-size is plain CSS
+ * px and never shrinks with the SVG's viewBox scale. `.scatter__body` is a
+ * two-column grid: labels on the left, the SVG + date ticks on the right,
+ * both positioned by percentage against the same VB_W/VB_H the SVG uses so
+ * they track the plot exactly at any width. */
 .scatter {
   margin: 0;
+}
+.scatter__body {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.5rem;
+  row-gap: 0.3rem;
+  align-items: stretch;
+}
+.scatter__rows {
+  position: relative;
+}
+.scatter__rowlabel {
+  position: absolute;
+  right: 0;
+  left: 0;
+  transform: translateY(-50%);
+  display: block;
+  font-size: var(--fs-cell);
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scatter__plotwrap {
+  position: relative;
 }
 .scatter__svg {
   display: block;
   width: 100%;
-  height: 240px;
+  height: auto;
   overflow: visible;
 }
 .scatter__axis {
@@ -970,23 +1009,32 @@ select.field__input {
   stroke-width: 1;
   opacity: 0.4;
 }
-.scatter__rowlabel {
-  fill: var(--text-muted);
-  font-size: 9px;
-  font-family: var(--font-sans);
-}
-.scatter__label {
-  fill: var(--text-faint);
-  font-size: 9px;
-  font-family: var(--font-sans);
-}
 .scatter__dot {
   stroke: var(--surface);
   stroke-width: 2;
 }
+.scatter__ticks {
+  position: relative;
+  height: 1.1rem;
+}
+.scatter__ticklabel {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: var(--fs-cell);
+  font-family: var(--font-sans);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.scatter__ticklabel--first {
+  transform: translateX(0);
+}
+.scatter__ticklabel--last {
+  transform: translateX(-100%);
+}
 .scatter__caption {
   margin-top: 0.5rem;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-cell);
   color: var(--text-muted);
   text-align: center;
 }
