@@ -83,6 +83,26 @@ export interface LocatedAction {
   action: Action;
 }
 
+export interface PillarRadarPoint {
+  name: string;
+  filled: number;
+  done: number;
+}
+
+/**
+ * One entry per pillar (in chart order) for the Progress dialog's Radar tab
+ * (v2.3, SPEC 21): `filled`/`done` are the same counts as `pillarProgress`
+ * (0..8), reusing isActionFilled/isActionDone so the radar's semantics never
+ * drift from the bar chart's. `name` falls back to 'Pillar N' (1-based) for an
+ * unnamed pillar, matching the fallback used elsewhere (e.g. BlockView).
+ */
+export function pillarRadar(chart: Chart): PillarRadarPoint[] {
+  return chart.pillars.map((pillar, i) => {
+    const { filled, done } = pillarProgress(pillar);
+    return { name: pillar.name.trim() || `Pillar ${i + 1}`, filled, done };
+  });
+}
+
 /**
  * Find an action by id within a chart, returning its indices and the live
  * pillar/action (or null if absent). Used by the Today view, which references

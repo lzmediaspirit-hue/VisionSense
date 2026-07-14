@@ -3,15 +3,20 @@ import {
   bucketsFor,
   calendarMonthFor,
   completionSummary,
+  dayAtOffset,
+  pillarActivity,
+  shortDayLabel,
   stepMonth,
   type CalendarMonth,
   type CompletionBucket,
+  type PillarActivityPoint,
   type ProgressView,
 } from '../model/completions';
-import type { Chart } from '../model/types';
+import { pillarRadar, type PillarRadarPoint } from '../model/progress';
+import { RULE_OF_8, type Chart, type Pillar } from '../model/types';
 
-/** The Progress dialog's tabs: the three bar-chart views plus the calendar. */
-type Tab = ProgressView | 'calendar';
+/** The Progress dialog's tabs: the three bar-chart views, the radar/scatter pair, and the calendar. */
+type Tab = ProgressView | 'radar' | 'scatter' | 'calendar';
 
 interface ProgressDialogProps {
   open: boolean;
@@ -23,8 +28,13 @@ const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'daily', label: 'Daily' },
   { id: 'monthly', label: 'Monthly' },
   { id: 'yearly', label: 'Yearly' },
+  { id: 'radar', label: 'Radar' },
+  { id: 'scatter', label: 'Scatter' },
   { id: 'calendar', label: 'Calendar' },
 ];
+
+/** Days of history shown on the Scatter ("Activity") tab (SPEC 21). */
+const SCATTER_DAYS = 90;
 
 const VIEW_CAPTION: Record<ProgressView, string> = {
   daily: 'Events per day, last 30 days',
@@ -70,12 +80,17 @@ export function ProgressDialog({ open, chart, onClose }: ProgressDialogProps) {
   }, [open]);
 
   const isCalendar = tab === 'calendar';
+  const isRadar = tab === 'radar';
+  const isScatter = tab === 'scatter';
+  // The bar chart only owns the three bucketed views — the radar/scatter/calendar
+  // tabs have their own data shapes, so bucketsFor never runs for them.
+  const isBarView = !isCalendar && !isRadar && !isScatter;
 
   // Recompute against "now" each time the dialog is (re)opened or the tab/chart
   // changes. A fresh Date is fine — bucketing is pure and cheap.
   const buckets = useMemo(
-    () => (open && !isCalendar ? bucketsFor(chart, tab as ProgressView, new Date()) : []),
-    [open, chart, tab, isCalendar],
+    () => (open && isBarView ? bucketsFor(chart, tab as ProgressView, new Date()) : []),
+    [open, chart, tab, isBarView],
   );
   const summary = useMemo(
     () => (open ? completionSummary(chart, new Date()) : null),
@@ -84,6 +99,15 @@ export function ProgressDialog({ open, chart, onClose }: ProgressDialogProps) {
   const calendarMonth = useMemo(
     () => (open && isCalendar ? calendarMonthFor(chart, cal.year, cal.month, new Date()) : null),
     [open, chart, isCalendar, cal.year, cal.month],
+  );
+  const radarData = useMemo(
+    () => (open && isRadar ? pillarRadar(chart) : []),
+    [open, chart, isRadar],
+  );
+  const scatterNow = useMemo(() => new Date(), [open, chart, isScatter]);
+  const scatterData = useMemo(
+    () => (open && isScatter ? pillarActivity(chart, scatterNow, SCATTER_DAYS) : []),
+    [open, chart, isScatter, scatterNow],
   );
 
   const totalInView = buckets.reduce((sum, b) => sum + b.count, 0);
@@ -153,6 +177,15 @@ export function ProgressDialog({ open, chart, onClose }: ProgressDialogProps) {
               month={calendarMonth}
               onPrev={() => setCal((c) => stepMonth(c.year, c.month, -1))}
               onNext={() => setCal((c) => stepMonth(c.year, c.month, 1))}
+            />
+          ) : isRadar ? (
+            <RadarChart data={radarData} />
+          ) : isScatter ? (
+            <ScatterChart
+              points={scatterData}
+              pillars={chart.pillars}
+              now={scatterNow}
+              days={SCATTER_DAYS}
             />
           ) : (
             <BarChart
@@ -273,6 +306,299 @@ function BarChart({
             <tr key={b.key}>
               <th scope="row">{b.fullLabel}</th>
               <td>{b.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </figure>
+  );
+}
+
+// --- Radar tab (v2.3, SPEC 21) -----------------------------------------------
+
+const RADAR_VB_W = 360;
+const RADAR_VB_H = 320;
+const RADAR_CX = 180;
+const RADAR_CY = 150;
+const RADAR_R = 88; // radius of the outer (8/8) ring
+const RADAR_LABEL_R = 106; // radius of the axis-label ring, just outside the grid
+const RADAR_RINGS = [2, 4, 6, 8]; // 25/50/75/100%
+
+/** Angle (radians) of axis `i` of `count`, starting at 12 o'clock, going clockwise. */
+function radarAngle(i: number, count: number): number {
+  return (Math.PI * 2 * i) / count - Math.PI / 2;
+}
+
+function radarPoint(angle: number, r: number): { x: number; y: number } {
+  return { x: RADAR_CX + r * Math.cos(angle), y: RADAR_CY + r * Math.sin(angle) };
+}
+
+function radarPolygon(points: Array<{ x: number; y: number }>): string {
+  return points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+}
+
+function truncateLabel(name: string, max = 12): string {
+  return name.length > max ? `${name.slice(0, max)}…` : name;
+}
+
+/**
+ * Radar tab ("Pillar balance", v2.3 SPEC 21): an 8-axis radar comparing filled
+ * vs done actions per pillar. `RULE_OF_8` is the fixed per-axis max (never 0),
+ * so every coordinate divides by a constant and can't go NaN even when a
+ * pillar's filled/done are both 0 — the polygon just collapses to the center.
+ */
+function RadarChart({ data }: { data: PillarRadarPoint[] }) {
+  // Chart.pillars is always length 8 (invariant), but guard anyway so a stray
+  // empty array can never divide-by-zero into a NaN angle.
+  const n = Math.max(1, data.length);
+  const filledPts = data.map((p, i) => radarPoint(radarAngle(i, n), (p.filled / RULE_OF_8) * RADAR_R));
+  const donePts = data.map((p, i) => radarPoint(radarAngle(i, n), (p.done / RULE_OF_8) * RADAR_R));
+  const totalFilled = data.reduce((s, p) => s + p.filled, 0);
+  const totalDone = data.reduce((s, p) => s + p.done, 0);
+
+  return (
+    <figure className="radar">
+      <svg
+        className="radar__svg"
+        viewBox={`0 0 ${RADAR_VB_W} ${RADAR_VB_H}`}
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-label={`Pillar balance. ${totalDone} of ${totalFilled} planned actions done, across ${n} pillars.`}
+      >
+        {/* Recessive grid: concentric rings + spokes, same faint treatment as the bar chart's axis. */}
+        {RADAR_RINGS.map((level) => (
+          <polygon
+            key={level}
+            points={radarPolygon(data.map((_, i) => radarPoint(radarAngle(i, n), (level / RULE_OF_8) * RADAR_R)))}
+            className="radar__grid"
+          />
+        ))}
+        {data.map((_, i) => {
+          const outer = radarPoint(radarAngle(i, n), RADAR_R);
+          return (
+            <line key={`spoke-${i}`} x1={RADAR_CX} y1={RADAR_CY} x2={outer.x} y2={outer.y} className="radar__grid" />
+          );
+        })}
+
+        {/* "Filled" series: dashed outline, no fill. */}
+        <polygon points={radarPolygon(filledPts)} className="radar__series radar__series--filled" />
+
+        {/* "Done" series: solid accent outline with a low-alpha fill. */}
+        <polygon points={radarPolygon(donePts)} className="radar__series radar__series--done" />
+        {data.map((p, i) => (
+          <circle key={p.name + i} cx={donePts[i].x} cy={donePts[i].y} r={4.5} className="radar__vertex">
+            <title>{`${p.name}: ${p.done} of ${RULE_OF_8} done, ${p.filled} filled`}</title>
+          </circle>
+        ))}
+
+        {/* Axis labels. */}
+        {data.map((p, i) => {
+          const angle = radarAngle(i, n);
+          const pos = radarPoint(angle, RADAR_LABEL_R);
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          const anchor = cos > 0.3 ? 'start' : cos < -0.3 ? 'end' : 'middle';
+          const dy = sin < -0.5 ? -2 : sin > 0.5 ? 8 : 3;
+          return (
+            <text
+              key={p.name + i}
+              x={pos.x}
+              y={pos.y + dy}
+              textAnchor={anchor}
+              className="radar__label"
+            >
+              {truncateLabel(p.name)}
+            </text>
+          );
+        })}
+      </svg>
+
+      <div className="radar__legend">
+        <span className="radar__legend-item">
+          <svg width="20" height="10" aria-hidden="true" focusable="false">
+            <line x1="0" y1="5" x2="20" y2="5" className="radar__swatch radar__swatch--filled" />
+          </svg>
+          Filled
+        </span>
+        <span className="radar__legend-item">
+          <svg width="20" height="10" aria-hidden="true" focusable="false">
+            <line x1="0" y1="5" x2="20" y2="5" className="radar__swatch radar__swatch--done" />
+          </svg>
+          Done
+        </span>
+      </div>
+
+      <figcaption className="radar__caption">Planned (filled) vs executed (done) actions per pillar.</figcaption>
+
+      <table className="visually-hidden">
+        <caption>Planned (filled) vs executed (done) actions per pillar.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Pillar</th>
+            <th scope="col">Filled</th>
+            <th scope="col">Done</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((p, i) => (
+            <tr key={p.name + i}>
+              <th scope="row">{p.name}</th>
+              <td>{p.filled}</td>
+              <td>{p.done}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </figure>
+  );
+}
+
+// --- Scatter tab (v2.3, SPEC 21) ---------------------------------------------
+
+const SCATTER_VB_W = 640;
+const SCATTER_VB_H = 260;
+const SCATTER_PAD_L = 72;
+const SCATTER_PAD_R = 10;
+const SCATTER_PAD_T = 10;
+const SCATTER_PAD_B = 26;
+const SCATTER_TICKS = 6;
+
+/** Dot radius: base 4 for count 1, area (~r^2) scales with count, capped at 9. */
+function scatterRadius(count: number): number {
+  return Math.min(9, 4 * Math.sqrt(count));
+}
+
+/**
+ * Scatter tab ("Activity", v2.3 SPEC 21): one row per pillar, one dot per
+ * (day, pillar) with events, sized by that day's event count. Identity is
+ * encoded by ROW POSITION + the row label — the pillar color on each dot is
+ * redundant reinforcement, not the primary channel, so (per the design rules)
+ * there is no legend here, unlike the two-series radar.
+ */
+function ScatterChart({
+  points,
+  pillars,
+  now,
+  days,
+}: {
+  points: PillarActivityPoint[];
+  pillars: readonly Pillar[];
+  now: Date;
+  days: number;
+}) {
+  const names = pillars.map((p, i) => p.name.trim() || `Pillar ${i + 1}`);
+  const plotW = SCATTER_VB_W - SCATTER_PAD_L - SCATTER_PAD_R;
+  const plotH = SCATTER_VB_H - SCATTER_PAD_T - SCATTER_PAD_B;
+  const rowH = plotH / RULE_OF_8;
+  const baselineY = SCATTER_PAD_T + plotH;
+  const rowY = (i: number) => SCATTER_PAD_T + rowH * (i + 0.5);
+  const dayX = (offset: number) =>
+    SCATTER_PAD_L + (days > 1 ? offset / (days - 1) : 0.5) * plotW;
+
+  const ticks = Array.from({ length: SCATTER_TICKS }, (_, k) => {
+    const offset = Math.round((k * (days - 1)) / (SCATTER_TICKS - 1));
+    return { offset, label: shortDayLabel(dayAtOffset(now, days, offset)) };
+  });
+  const todayOffset = days - 1;
+  const totalEvents = points.reduce((s, p) => s + p.count, 0);
+
+  if (points.length === 0) {
+    return (
+      <div className="scatter">
+        <p className="scatter__empty">
+          No activity in the last {days} days. Habit check-ins and completed actions will appear
+          here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <figure className="scatter">
+      <svg
+        className="scatter__svg"
+        viewBox={`0 0 ${SCATTER_VB_W} ${SCATTER_VB_H}`}
+        role="img"
+        aria-label={`Activity, last ${days} days. ${totalEvents} completion event${
+          totalEvents === 1 ? '' : 's'
+        } shown.`}
+      >
+        {/* Today's column: a very faint vertical guide. */}
+        <line
+          x1={dayX(todayOffset)}
+          y1={SCATTER_PAD_T}
+          x2={dayX(todayOffset)}
+          y2={baselineY}
+          className="scatter__today"
+        />
+
+        {/* One faint horizontal guide per pillar row, plus its label. */}
+        {names.map((name, i) => (
+          <g key={name + i}>
+            <line
+              x1={SCATTER_PAD_L}
+              y1={rowY(i)}
+              x2={SCATTER_VB_W - SCATTER_PAD_R}
+              y2={rowY(i)}
+              className="scatter__axis"
+            />
+            <text x={SCATTER_PAD_L - 8} y={rowY(i) + 3} textAnchor="end" className="scatter__rowlabel">
+              {truncateLabel(name, 10)}
+            </text>
+          </g>
+        ))}
+
+        {/* Recessive x-axis baseline + date ticks. */}
+        <line x1={SCATTER_PAD_L} y1={baselineY} x2={SCATTER_VB_W - SCATTER_PAD_R} y2={baselineY} className="scatter__axis" />
+        {ticks.map((t) => (
+          <text
+            key={t.offset}
+            x={dayX(t.offset)}
+            y={SCATTER_VB_H - 8}
+            textAnchor="middle"
+            className="scatter__label"
+          >
+            {t.label}
+          </text>
+        ))}
+
+        {points.map((pt) => {
+          const pillar = pillars[pt.pillarIndex];
+          const name = names[pt.pillarIndex];
+          return (
+            <circle
+              key={`${pt.dayOffset}-${pt.pillarIndex}`}
+              cx={dayX(pt.dayOffset)}
+              cy={rowY(pt.pillarIndex)}
+              r={scatterRadius(pt.count)}
+              className="scatter__dot"
+              style={{ fill: pillar.color }}
+            >
+              <title>{`${name} — ${pt.fullLabel}: ${pt.count} event${pt.count === 1 ? '' : 's'}`}</title>
+            </circle>
+          );
+        })}
+      </svg>
+
+      <figcaption className="scatter__caption">
+        Each dot is a day's completions in that pillar — bigger dot, more events. Last {days} days.
+      </figcaption>
+
+      <table className="visually-hidden">
+        <caption>Activity by day and pillar, last {days} days.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Day</th>
+            <th scope="col">Pillar</th>
+            <th scope="col">Events</th>
+          </tr>
+        </thead>
+        <tbody>
+          {points.map((pt) => (
+            <tr key={`${pt.dayOffset}-${pt.pillarIndex}`}>
+              <th scope="row">{pt.fullLabel}</th>
+              <td>{names[pt.pillarIndex]}</td>
+              <td>{pt.count}</td>
             </tr>
           ))}
         </tbody>

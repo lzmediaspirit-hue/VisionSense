@@ -810,15 +810,24 @@ select.field__input {
   color: var(--text-muted);
 }
 .progress-tabs {
-  display: inline-flex;
+  display: flex;
   gap: 2px;
   padding: 2px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
   margin-bottom: 1rem;
+  /* Six tabs (v2.3) no longer fit a 375px-wide modal — scroll within the pill
+   * instead of overflowing it (hard rule: no page-level horizontal scroll). */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.progress-tabs::-webkit-scrollbar {
+  display: none;
 }
 .progress-tabs__tab {
+  flex: 0 0 auto;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -826,6 +835,7 @@ select.field__input {
   font-weight: 550;
   padding: 0.4rem 1rem;
   border-radius: 999px;
+  white-space: nowrap;
   transition: background 0.12s var(--ease), color 0.12s var(--ease);
 }
 .progress-tabs__tab:hover {
@@ -867,6 +877,114 @@ select.field__input {
   font-family: var(--font-sans);
 }
 .barchart__caption {
+  margin-top: 0.5rem;
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* --------------------------------------------- radar chart (v2.3, 21) */
+.radar {
+  margin: 0;
+}
+.radar__svg {
+  display: block;
+  width: 100%;
+  height: 220px;
+  overflow: visible;
+}
+.radar__grid {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.radar__series {
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.radar__series--filled {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-dasharray: 4 3;
+}
+.radar__series--done {
+  stroke: var(--accent);
+  fill: var(--accent);
+  fill-opacity: 0.18;
+}
+.radar__vertex {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.radar__label {
+  fill: var(--text-muted);
+  font-size: 9px;
+  font-family: var(--font-sans);
+}
+.radar__legend {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-top: 0.4rem;
+}
+.radar__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+}
+.radar__swatch--filled {
+  stroke: var(--text-faint);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+.radar__swatch--done {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.radar__caption {
+  margin-top: 0.5rem;
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* -------------------------------------------- scatter plot (v2.3, 21) */
+.scatter {
+  margin: 0;
+}
+.scatter__svg {
+  display: block;
+  width: 100%;
+  height: 240px;
+  overflow: visible;
+}
+.scatter__axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.scatter__today {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  opacity: 0.4;
+}
+.scatter__rowlabel {
+  fill: var(--text-muted);
+  font-size: 9px;
+  font-family: var(--font-sans);
+}
+.scatter__label {
+  fill: var(--text-faint);
+  font-size: 9px;
+  font-family: var(--font-sans);
+}
+.scatter__dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.scatter__caption {
   margin-top: 0.5rem;
   font-size: var(--fs-meta);
   color: var(--text-muted);
@@ -1941,7 +2059,8 @@ select.field__input {
   font-size: 0.8rem;
 }
 .today__empty,
-.review__empty {
+.review__empty,
+.scatter__empty {
   color: var(--text-muted);
   font-size: 0.88rem;
   line-height: 1.55;

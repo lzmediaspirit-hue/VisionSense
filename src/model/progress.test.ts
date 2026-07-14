@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createChart } from './factory';
 import {
+  renamePillar,
   setActionCadence,
   setActionEstablished,
   setActionHabit,
@@ -16,6 +17,7 @@ import {
   isPillarComplete,
   isWeeklyHabit,
   pillarProgress,
+  pillarRadar,
 } from './progress';
 
 const CLOCK = () => '2021-01-01T00:00:00.000Z';
@@ -113,5 +115,44 @@ describe('progress', () => {
     expect(isPillarComplete({ filled: 8, done: 7, total: 8 })).toBe(false);
     expect(isPillarComplete({ filled: 7, done: 7, total: 8 })).toBe(false);
     expect(isPillarComplete({ filled: 0, done: 0, total: 8 })).toBe(false);
+  });
+
+  // --- Radar chart data (v2.3, SPEC 21) --------------------------------------
+
+  it('pillarRadar reports all-zero entries for an empty chart', () => {
+    const radar = pillarRadar(createChart());
+    expect(radar).toHaveLength(8);
+    for (const p of radar) expect(p).toEqual({ name: expect.any(String), filled: 0, done: 0 });
+  });
+
+  it('pillarRadar counts filled/done per pillar, matching pillarProgress semantics', () => {
+    let chart = createChart();
+    chart = setActionText(chart, 0, 0, 'Run', CLOCK);
+    chart = setActionStatus(chart, 0, 0, 'done', CLOCK);
+    chart = setActionText(chart, 0, 1, 'Stretch', CLOCK);
+    const radar = pillarRadar(chart);
+    expect(radar[0]).toEqual({ name: expect.any(String), filled: 2, done: 1 });
+  });
+
+  it('pillarRadar counts an established habit as done, an unestablished one as filled only', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Meditate', CLOCK);
+    chart = setActionHabit(chart, 0, 0, true, CLOCK);
+    chart = toggleHabitToday(chart, 0, 0, CLOCK);
+    expect(pillarRadar(chart)[0]).toEqual({ name: expect.any(String), filled: 1, done: 0 });
+
+    chart = setActionEstablished(chart, 0, 0, true, CLOCK);
+    expect(pillarRadar(chart)[0]).toEqual({ name: expect.any(String), filled: 1, done: 1 });
+  });
+
+  it('pillarRadar names fall back to "Pillar N" (1-based) for an unnamed pillar', () => {
+    const radar = pillarRadar(createChart());
+    expect(radar[0].name).toBe('Pillar 1');
+    expect(radar[7].name).toBe('Pillar 8');
+  });
+
+  it('pillarRadar trims a named pillar and uses it as-is', () => {
+    let chart = createChart();
+    chart = renamePillar(chart, 2, '  Health  ', CLOCK);
+    expect(pillarRadar(chart)[2].name).toBe('Health');
   });
 });

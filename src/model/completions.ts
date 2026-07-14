@@ -43,29 +43,57 @@ export function localMonthKey(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
 
+/** Short human label for a Date, no year (e.g. 'Jun 1') — shared by the daily bar axis and the scatter plot. */
+export function shortDayLabel(d: Date): string {
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
 /**
- * All completion EVENTS in a chart, as local Dates (SPEC 8.3): every habit
- * daily check-off (`completions` entries) plus every task completion
+ * The local Date `days - 1 - offset` days before `now`, i.e. `offset` counts
+ * forward from the oldest day in a trailing `days`-day window ending on `now`
+ * (offset 0 = oldest day, `days - 1` = `now`'s own day). Shared by
+ * `pillarActivity` and its axis-tick labels so the two never drift apart.
+ */
+export function dayAtOffset(now: Date, days: number, offset: number): Date {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1) + offset);
+}
+
+/** An event tagged with the pillar it belongs to (used by the Scatter tab, SPEC 21). */
+export interface PillarEvent {
+  date: Date;
+  pillarIndex: number;
+}
+
+/**
+ * All completion EVENTS in a chart, tagged with their pillar (SPEC 8.3): every
+ * habit daily check-off (`completions` entries) plus every task completion
  * (`completedAt`). A habit's stored `completedAt` is ignored — its check-offs
  * live in `completions` — so events are never double-counted. Unparseable
- * timestamps are skipped rather than throwing.
+ * timestamps are skipped rather than throwing. This is the single source of
+ * event-extraction truth; `collectCompletions` and `pillarActivity` both build
+ * on it rather than re-walking the chart themselves.
  */
-export function collectCompletions(chart: Chart): Date[] {
-  const dates: Date[] = [];
-  const push = (iso: string | null) => {
+export function collectPillarEvents(chart: Chart): PillarEvent[] {
+  const events: PillarEvent[] = [];
+  const push = (pillarIndex: number, iso: string | null) => {
     if (iso === null) return;
     const d = new Date(iso);
-    if (!Number.isNaN(d.getTime())) dates.push(d);
+    if (!Number.isNaN(d.getTime())) events.push({ date: d, pillarIndex });
   };
-  for (const pillar of chart.pillars) {
+  chart.pillars.forEach((pillar, pillarIndex) => {
     for (const action of pillar.actions) {
-      for (const c of action.completions) push(c);
+      for (const c of action.completions) push(pillarIndex, c);
       // For a habit the stored completedAt is ignored (SPEC 8.1); a task's
       // completion is the event.
-      if (!action.habit) push(action.completedAt);
+      if (!action.habit) push(pillarIndex, action.completedAt);
     }
-  }
-  return dates;
+  });
+  return events;
+}
+
+/** All completion event Dates in a chart, pillar identity discarded. */
+export function collectCompletions(chart: Chart): Date[] {
+  return collectPillarEvents(chart).map((e) => e.date);
 }
 
 /** Whether a habit action has a check-off on the local day of `now`. */
@@ -97,8 +125,8 @@ export function dailyBuckets(dates: Date[], now: Date = new Date(), days = 30): 
     const key = localDayKey(d);
     buckets.push({
       key,
-      label: `${MONTHS[d.getMonth()]} ${d.getDate()}`,
-      fullLabel: `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`,
+      label: shortDayLabel(d),
+      fullLabel: `${shortDayLabel(d)}, ${d.getFullYear()}`,
       count: counts.get(key) ?? 0,
     });
   }
@@ -313,4 +341,58 @@ export function calendarMonthFor(
 export function stepMonth(year: number, month: number, delta: number): { year: number; month: number } {
   const d = new Date(year, month + delta, 1);
   return { year: d.getFullYear(), month: d.getMonth() };
+}
+
+// --- Pillar activity (v2.3, SPEC 21) -----------------------------------------
+//
+// Data for the Progress dialog's Scatter tab: one point per (day, pillar) that
+// had at least one event in the trailing `days`-day window ending on `now`,
+// local calendar days throughout (see the TIMEZONE NOTE above).
+
+export interface PillarActivityPoint {
+  /** Local 'YYYY-MM-DD' of the day this point falls on. */
+  dayKey: string;
+  /** 0..days-1, 0 = the oldest day in the window, days-1 = `now`'s day. */
+  dayOffset: number;
+  pillarIndex: number;
+  /** Event count for this pillar on this day (>= 1 — zero-count points are omitted). */
+  count: number;
+  /** Short label e.g. 'Jul 14' (no year — matches the daily bar chart's label). */
+  fullLabel: string;
+}
+
+/**
+ * Per-pillar completion events bucketed by local day, for the last `days` days
+ * ending on `now` (local), inclusive — the same window convention as
+ * `dailyBuckets`: the oldest day is `now` minus `days - 1`, so a day exactly
+ * `days` ago falls outside the window. Only (day, pillar) pairs with at least
+ * one event are returned — there's nothing to plot at zero.
+ */
+export function pillarActivity(chart: Chart, now: Date = new Date(), days = 90): PillarActivityPoint[] {
+  const events = collectPillarEvents(chart);
+  const startTime = dayAtOffset(now, days, 0).getTime();
+  const counts = new Map<string, number>();
+  for (const e of events) {
+    const dayStart = new Date(e.date.getFullYear(), e.date.getMonth(), e.date.getDate());
+    const dayOffset = Math.round((dayStart.getTime() - startTime) / 86_400_000);
+    if (dayOffset < 0 || dayOffset >= days) continue;
+    const key = `${dayOffset}:${e.pillarIndex}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const points: PillarActivityPoint[] = [];
+  for (const [key, count] of counts) {
+    const [offsetStr, pillarStr] = key.split(':');
+    const dayOffset = Number(offsetStr);
+    const pillarIndex = Number(pillarStr);
+    const d = dayAtOffset(now, days, dayOffset);
+    points.push({
+      dayKey: localDayKey(d),
+      dayOffset,
+      pillarIndex,
+      count,
+      fullLabel: shortDayLabel(d),
+    });
+  }
+  points.sort((a, b) => a.dayOffset - b.dayOffset || a.pillarIndex - b.pillarIndex);
+  return points;
 }
