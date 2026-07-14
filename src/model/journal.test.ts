@@ -7,6 +7,7 @@ import { localDayKey, streakAcrossCharts } from './completions';
 import { createAction, createChart } from './factory';
 import {
   DAY_MAX_AGE_DAYS,
+  dueHabitCount,
   isoWeekKey,
   isoWeekLabel,
   isReviewDue,
@@ -244,6 +245,60 @@ describe('weekCompletions / isWeeklySatisfied (v1.5)', () => {
       0,
     );
     expect(isWeeklySatisfied(action, NOW)).toBe(false);
+  });
+});
+
+describe('dueHabitCount (v2.1)', () => {
+  const NOW = new Date(2026, 6, 13); // Monday, ISO week 2026-W29
+
+  it('counts a daily habit not yet checked off today', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Meditate');
+    chart = setActionHabit(chart, 0, 0, true);
+    expect(dueHabitCount(chart, NOW)).toBe(1);
+  });
+
+  it('does not count a daily habit already checked off today', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Meditate');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = toggleHabitToday(chart, 0, 0, () => NOW.toISOString());
+    expect(dueHabitCount(chart, NOW)).toBe(0);
+  });
+
+  it('does not count a weekly habit that has met its target this week', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Gym');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = setActionCadence(chart, 0, 0, 2);
+    // Checked off two days this week, satisfying the target — but NEITHER is
+    // "today" (Mon the 13th), so the "checked off today" exemption isn't what's
+    // masking it; the satisfied-target rule alone must be doing the work.
+    chart = toggleHabitToday(chart, 0, 0, () => new Date(2026, 6, 14, 8, 0).toISOString()); // Tue, this week
+    chart = toggleHabitToday(chart, 0, 0, () => new Date(2026, 6, 15, 8, 0).toISOString()); // Wed, this week
+    expect(isWeeklySatisfied(chart.pillars[0].actions[0], NOW)).toBe(true);
+    expect(dueHabitCount(chart, NOW)).toBe(0);
+  });
+
+  it('does not count a weekly habit already checked off today, even if unsatisfied', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Gym');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = setActionCadence(chart, 0, 0, 3);
+    chart = toggleHabitToday(chart, 0, 0, () => NOW.toISOString());
+    expect(dueHabitCount(chart, NOW)).toBe(0);
+  });
+
+  it('counts a weekly habit that is unsatisfied and not checked off today', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Gym');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = setActionCadence(chart, 0, 0, 3);
+    expect(dueHabitCount(chart, NOW)).toBe(1);
+  });
+
+  it('never counts an established habit, an empty (unfilled) habit action, or a non-habit action', () => {
+    let chart = setActionText(createChart(), 0, 0, 'Established habit');
+    chart = setActionHabit(chart, 0, 0, true);
+    chart = setActionEstablished(chart, 0, 0, true);
+    chart = setActionHabit(chart, 0, 1, true); // unfilled: text is still ''
+    chart = setActionText(chart, 0, 2, 'Plain task'); // filled but not a habit
+    expect(dueHabitCount(chart, NOW)).toBe(0);
   });
 });
 

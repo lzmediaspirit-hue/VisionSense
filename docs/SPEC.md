@@ -1036,3 +1036,133 @@ of the pillar's hue, and a pillar-complete cell (§17.3) tints at 26%. The
 living-mandala treatment is the same idea applied to the individual done
 cell, at a more restrained 18% so the green status glyph — not the
 background wash — stays the dominant "this is done" signal.
+
+## 19. Today chart tabs (v2.1)
+
+Once a user has more than one chart, Today's Daily/Weekly habit lists used
+to stack every chart's habits on one page, one below the other, separated
+only by the `.today__chart-eyebrow` label from §16.1. That reads fine at
+two charts but degrades into a wall of pillar groups past that — so Today
+now scopes the habit sections to one chart at a time via a tab bar.
+**Presentation + one pure helper**: `schemaVersion` stays `1`, no data
+shape changes, no new reducer actions, no new state persisted (the active
+tab is transient component state, reset each time Today is opened).
+
+### 19.1 When the tabs appear
+
+`charts.length > 1` is the only gate. With exactly one chart, `TodayView`
+renders precisely as before v2.1 — no tablist, no behavior change — since
+a single-chart user has nothing to switch between and the tab bar would be
+pure chrome. The bar sits between the "Top 3 for today" section and
+"Daily habits", because it scopes only what comes after it (§19.2); it
+does not visually belong to the hero or the MIT picker above it.
+
+### 19.2 Scope: what the tab controls, and what stays global
+
+Only the **Daily habits** and **Weekly habits** sections filter to the
+active chart's rows. Everything else on the page stays cross-chart and
+unaffected by which tab is selected:
+- the hero date/streak (`streakAcrossCharts`, unchanged from §11.2);
+- **Top 3 for today** — MITs are a deliberate cross-chart, day-level pick
+  (the whole point is choosing the 3 things that matter across every goal
+  today), so scoping them to one chart would defeat the feature. MIT rows
+  keep their existing `multiChart` chart-name prefix in `.mit__context`
+  (§16.1) precisely because they still span charts;
+- the evening reflection note and the done-today summary — both already
+  aggregate across every chart's completions for the day.
+
+Internally, `TodayView` still builds `dailyHabitRows` / `weeklyHabitRows`
+across ALL charts first (the existing `useMemo`s, unchanged) — the
+default-tab rule (§19.4) and the tab bar's per-chart due badges both need
+the full cross-chart picture. Only afterward are `activeDailyHabitRows` /
+`activeWeeklyHabitRows` derived by filtering those lists to
+`row.chart.id === activeChartId` (a no-op filter when there's only one
+chart), and `groupHabitRows` (§16.1, unchanged) runs on the filtered
+lists. With a tab active, `groupHabitRows` therefore only ever produces a
+single chart-group, which is why the per-chart `.today__chart-eyebrow`
+from §16.1 is dropped entirely (§19.5) — the active tab already names the
+chart it belongs to.
+
+### 19.3 The due-count badge
+
+Each tab shows the chart's title (`goal.trim() || 'Untitled chart'`,
+CSS-truncated to ~16ch with an ellipsis via `.today__tab-title`) and,
+when non-zero, a small count badge of that chart's habits still "due"
+today. A new pure helper owns the rule, `dueHabitCount(chart, now?)` in
+`src/model/journal.ts` next to `isWeeklySatisfied`:
+
+- a non-established, filled habit only ever counts if it's a daily habit
+  (`weeklyTarget === 0`) not yet checked off today, OR a weekly-cadence
+  habit (`weeklyTarget >= 1`) that has NOT yet met its weekly target
+  (`isWeeklySatisfied`) AND has not been checked off today;
+- established habits, empty (unfilled) actions, and non-habit actions
+  never count — mirroring the existing eligibility rule the Daily/Weekly
+  sections themselves use (`action.habit && !action.established &&
+  isActionFilled(action)`).
+
+The badge is computed independently per chart via `dueHabitCount`, not
+derived from the (possibly filtered) row lists — every tab's badge reflects
+its own chart's due count regardless of which tab is currently active.
+Checking a habit off (or a weekly habit meeting its target) immediately
+drops that chart's badge, since `dueHabitCount` re-derives on every render
+from the chart's own state.
+
+### 19.4 Default tab
+
+Active-tab state is `useState<string | null>` holding a chart id, but it
+is resolved DEFENSIVELY on every render rather than trusted outright: if
+the stored id no longer matches any chart in `state.charts` (deleted, or
+nothing picked yet — the initial `null`), the view falls back to a
+computed default — the first chart (in chart order) with `dueHabitCount >
+0`; if no chart has anything due, the first chart with any habit rows at
+all (daily or weekly); if no chart has habits either, just the first
+chart. This means a user who opens Today generally lands on whichever
+chart most needs attention today, without persisting that choice anywhere
+— reopening Today re-runs the same default logic fresh.
+
+### 19.5 Empty states, scoped
+
+The Daily habits section's existing "No daily habits yet…" empty copy
+(§12) is now keyed off `activeDailyHabitRows` instead of the global list —
+so with tabs active, a chart with zero daily habits shows the empty state
+even while a sibling chart has plenty; switching tabs re-evaluates it. The
+Weekly habits section keeps its existing rule of "no section, no empty
+state" (§12) but scoped the same way: it renders only when the ACTIVE
+chart has weekly habit rows, not when any chart does.
+
+### 19.6 Accessibility & interaction
+
+The tab bar is a standard ARIA tabs pattern: `role="tablist"
+aria-label="Charts"` on the container; each tab is `<button role="tab"
+aria-selected id="today-tab-{chartId}">`; the two habit sections share a
+single wrapping `role="tabpanel" aria-labelledby="today-tab-{activeId}"`
+container that re-renders per tab (one shared panel, never two mounted
+panels). Roving tabindex: the selected tab gets `tabIndex={0}`, every
+other tab `tabIndex={-1}`, so a single Tab keystroke from outside the bar
+lands on whichever tab is active. `ArrowLeft`/`ArrowRight` move selection
+by one tab with wrap-around at either end and move focus to the newly
+selected tab in the same keystroke — "selection follows focus" (automatic
+activation), the simpler of the two standard tab patterns and the correct
+one here since switching tabs has no cost (no network fetch, no
+confirmation) to defer. Each tab is a minimum 44px-tall touch target (the
+project rule since §15).
+
+### 19.7 Styling & responsive
+
+`.today__tabs` is a horizontal flex row with `overflow-x: auto` (scrollbar
+hidden via `scrollbar-width: none` / the WebKit pseudo-selector) so a long
+tab row scrolls within its own bar on narrow viewports rather than
+widening the page — the app's hard "no page-level horizontal scroll at
+375px" rule is preserved by construction, since `.today__tabs`' children
+are `flex: 0 0 auto` and the row itself never exceeds `.today`'s existing
+max-width. `.today__tab` is a pill matching the app's `.btn` shape
+(`border-radius: 999px`, `1px solid var(--border-strong)`, `var(--surface)`
+background) rather than reusing `.btn--ghost` directly, since a tab needs
+`aria-selected`-driven active styling `.btn` doesn't have; `.is-active`
+takes the same filled `var(--accent)` treatment as `.btn--primary`, fitting
+the Today view's minimal theme (`data-theme="minimal"`). `.today__tab-count`
+mirrors `.due-badge`'s color/shape on an inactive (light-surface) tab, and
+switches to `.cta-streak`'s translucent-white-on-accent treatment
+(`rgba(255, 255, 255, 0.25)`) on the active tab, so it reads as sitting
+"on" the accent fill rather than clashing with it — reusing the two
+existing count-pill idioms in the codebase rather than inventing a third.
