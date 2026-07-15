@@ -98,8 +98,10 @@ export function fitEdgeModel(obs: Observation[], l2 = 1e-3): EdgeModel {
       h01 += w * x
       h11 += w * x * x
     }
-    // Ridge on b only (never penalise the intercept).
-    g1 -= l2 * b
+    // Ridge on the slope only (never penalise the intercept), shrinking b
+    // toward 1 — the efficient-market null — not toward 0. This nudges a tiny
+    // sample to "no bias" rather than fabricating an inverse bias.
+    g1 -= l2 * (b - 1)
     h11 += l2
     // Newton step: [a,b] += H^{-1} g. H is positive definite here.
     const det = h00 * h11 - h01 * h01

@@ -9,7 +9,7 @@
 // outcomePrices of ["1","0"] or ["0","1"]; the "1" marks the winning outcome.
 //
 // NOTE: this file only runs where outbound HTTPS to Polymarket is allowed. In
-// restricted CI/sandbox environments use the fixtures path instead (`--offline`).
+// restricted CI/sandbox environments omit `--live` to use the offline fixtures.
 
 import type { ResolvedMarket } from './types.ts'
 
@@ -28,6 +28,9 @@ interface GammaMarket {
   volume?: string | number
   endDate?: string
   endDateIso?: string
+  /** When the market actually closed/resolved; earlier than endDate if it
+   *  resolved ahead of schedule. Preferred anchor for the lead-time entry. */
+  closedTime?: string
 }
 
 interface PricePoint {
@@ -66,13 +69,17 @@ function yesIndex(outcomes: string[]): number {
 
 /** YES price at `targetTs` = last observed price at or before that instant. */
 function priceAt(history: PricePoint[], targetTs: number): number | null {
+  // CLOB history is ascending by time in practice; sort defensively.
+  const sorted = [...history].sort((a, b) => a.t - b.t)
   let chosen: number | null = null
-  for (const pt of history) {
+  for (const pt of sorted) {
     if (pt.t <= targetTs) chosen = pt.p
     else break
   }
-  // Fall back to the earliest point if the target predates all history.
-  if (chosen === null && history.length > 0) chosen = history[0].p
+  // No fall-back: if the series only starts *after* the target, honouring the
+  // earliest point would mean entering far later than the requested lead time
+  // (often minutes before close on short-fuse markets, where the price is
+  // already sharp). Return null so the caller skips the market instead.
   return chosen
 }
 
@@ -126,7 +133,11 @@ export async function fetchResolvedMarkets(
       const volume = Number(m.volumeNum ?? m.volume ?? 0)
       if (volume < minVolume) continue
 
-      const endIso = m.endDate ?? m.endDateIso
+      // Anchor the lead time on the *actual* close, not the scheduled endDate:
+      // markets that resolve early sit pinned near 0/1 afterwards, and entering
+      // relative to a late scheduled date would sample that post-resolution
+      // price — lookahead that would inflate every downstream number.
+      const endIso = m.closedTime ?? m.endDate ?? m.endDateIso
       if (!endIso) continue
       const endTs = Math.floor(new Date(endIso).getTime() / 1000)
       if (!Number.isFinite(endTs)) continue
@@ -136,7 +147,9 @@ export async function fetchResolvedMarkets(
           `${CLOB}/prices-history?market=${tokens[yi]}&interval=max&fidelity=60`,
         )
         const entry = priceAt(hist.history ?? [], endTs - leadSeconds)
-        if (entry === null || entry <= 0 || entry >= 1) continue
+        // Reject near-pinned entries (<2% or >98%): these almost always mean the
+        // outcome was already effectively known at entry, which is not a real bet.
+        if (entry === null || entry < 0.02 || entry > 0.98) continue
         out.push({
           id: m.conditionId ?? m.id ?? String(out.length),
           question: m.question ?? '(unknown)',

@@ -54,8 +54,15 @@ function parseArgs(argv: string[]): Args {
       else flags.set(k, v)
     }
   }
-  const num = (k: string, d: number) =>
-    flags.has(k) ? Number(flags.get(k)) : d
+  const num = (k: string, d: number) => {
+    if (!flags.has(k)) return d
+    const v = Number(flags.get(k))
+    if (!Number.isFinite(v)) {
+      line(`Ignoring --${k}=${flags.get(k)} (not a number); using ${d}.`)
+      return d
+    }
+    return v
+  }
   return {
     live: bare.has('live'),
     picks: bare.has('picks'),
@@ -132,16 +139,26 @@ async function main(): Promise<void> {
     `Train: ${train.length} markets  |  Test: ${test.length} markets ` +
       `(chronological split, no lookahead)\n`,
   )
-  const results = [
-    runStrategy('buy-all-YES', test, buyAllYes),
-    runStrategy(`back-longshots<=${(1 - args.favThreshold).toFixed(2)}`, test, backLongshots(1 - args.favThreshold)),
-    runStrategy(`back-favorites>=${args.favThreshold.toFixed(2)}`, test, backFavorites(args.favThreshold)),
-    runStrategy('edge-model (OOS)', test, modelStrategy(model, args.minEdge)),
-  ]
+  const allYes = runStrategy('buy-all-YES', test, buyAllYes)
+  const control = runStrategy(
+    `back-longshots<=${(1 - args.favThreshold).toFixed(2)}`,
+    test,
+    backLongshots(1 - args.favThreshold),
+  )
+  const favorites = runStrategy(
+    `back-favorites>=${args.favThreshold.toFixed(2)}`,
+    test,
+    backFavorites(args.favThreshold),
+  )
+  const edgeModelResult = runStrategy('edge-model (OOS)', test, modelStrategy(model, args.minEdge))
+  const results = [allYes, control, favorites, edgeModelResult]
   line(renderStrategies(results))
   line()
-  line('Read: avgROI is return per $1 staked; t-stat > ~2 suggests a real edge.')
-  line('back-longshots is the control — if the bias is real it should lose money.')
+  line('Read: avgROI is return per $1 staked; t-stat > ~2 suggests a real edge —')
+  line('but it assumes bets are independent, which correlated live markets')
+  line('(multi-outcome events, price ladders) violate, so treat it as an upper')
+  line('bound on significance. back-longshots is the control: if the bias is')
+  line('real it should lose money.')
 
   header('STAGE 4 — FIND BEST BETS: rank markets by model edge')
   if (args.live && args.picks) {
@@ -170,14 +187,16 @@ async function main(): Promise<void> {
   }
 
   header('SUMMARY')
-  const edgeModelResult = results[results.length - 1]
-  const control = results[1]
+  const profitable = model.b > 1.05 && edgeModelResult.avgRoi > 0
   const verdict =
-    model.b > 1.05 && edgeModelResult.avgRoi > 0 && edgeModelResult.tStat > 1.5
+    profitable && edgeModelResult.tStat >= 2
       ? 'The favorite–longshot edge is present and profitable out-of-sample.'
-      : model.b > 1.05
-        ? 'A favorite–longshot bias is detectable but the OOS edge is weak/noisy.'
-        : 'No exploitable favorite–longshot edge detected in this sample.'
+      : profitable
+        ? 'A favorite–longshot bias is detectable and profitable out-of-sample, ' +
+          'but below the t≈2 significance bar — suggestive, not conclusive.'
+        : model.b > 1.05
+          ? 'A favorite–longshot bias is detectable but the OOS edge is weak/noisy.'
+          : 'No exploitable favorite–longshot edge detected in this sample.'
   line(verdict)
   line(
     `  model slope b=${model.b.toFixed(3)} | edge-model OOS avgROI=` +

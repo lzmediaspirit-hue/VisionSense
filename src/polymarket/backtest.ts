@@ -110,6 +110,11 @@ export function runStrategy(
   const variance =
     nBets < 2 ? 0 : bets.reduce((s, b) => s + (b.roi - avgRoi) ** 2, 0) / (nBets - 1)
   const stdRoi = Math.sqrt(variance)
+  // t-stat of mean ROI vs 0. Treat it as an UPPER BOUND on significance: it
+  // assumes independent bets, but live markets cluster (multi-outcome events
+  // split into correlated binaries, price ladders), so the effective n is
+  // smaller than nBets. Favorite ROI is also skewed (many small wins, rare
+  // -100% losses), which the normal approximation handles poorly at small n.
   const tStat = stdRoi === 0 ? 0 : avgRoi / (stdRoi / Math.sqrt(nBets))
   return {
     name,

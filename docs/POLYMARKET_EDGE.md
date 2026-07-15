@@ -58,7 +58,12 @@ means buy NO.
   `edge` column (realized − implied) is the raw, model-free signal.
 
 Read the `t-stat` as significance of the mean ROI: `|t| ≳ 2` is suggestive of a
-real edge, not noise.
+real edge, not noise. **Treat it as an upper bound**: it assumes bets are
+independent, but live Polymarket markets cluster (a single event split into many
+correlated binaries, crypto price ladders), so the effective sample is smaller
+than the bet count and the t-stat runs anti-conservative. Favorite payoffs are
+also skewed (many small wins, rare −100% losses), which the normal
+approximation handles poorly at small `n`.
 
 ## Sample offline run
 
@@ -86,7 +91,7 @@ back-longshots<=0.20   170 bets   10.6% win  -24.2% avgROI   (control loses, as 
 | `--min-volume=<$>` | 5000 | Skip illiquid markets |
 | `--max=<n>` | 300 | Max resolved markets to keep (live) |
 | `--fav-threshold=<0..1>` | 0.8 | Price cutoff for the favorites strategy |
-| `--min-edge=<0..1>` | 0.03 | Minimum |fair − price| to place a bet |
+| `--min-edge=<0..1>` | 0.03 | Minimum \|fair − price\| to place a bet |
 | `--train=<0..1>` | 0.5 | Fraction of history used to fit the model |
 | `--seed=<int>` | 42 | Fixture RNG seed (offline) |
 
