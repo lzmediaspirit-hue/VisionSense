@@ -2264,6 +2264,25 @@ select.field__input {
   color: var(--text-muted);
 }
 
+/* Bonus picks (v2.4, SPEC 22): unlimited picks beyond the Top 3, rendered in
+ * the same "Top 3 for today" section under a small muted subheading. Rows
+ * reuse .mit-list/.mit as-is; `.mit-list--bonus` only de-emphasizes the
+ * not-yet-done rows so completed bonus picks read identically to Top 3 rows. */
+.today__bonus {
+  margin-top: 0.85rem;
+}
+.today__bonus-title {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+}
+.mit-list--bonus .mit:not(.is-done) {
+  opacity: 0.7;
+  border-left: 2px solid var(--border-strong);
+}
+
 /* Pillar grouping (v1.9, SPEC 16): the Today habit lists group under a
  * pillar sub-header instead of repeating "chart · pillar" on every row. With
  * more than one chart, the active chart tab (v2.1, SPEC 19) already names the
@@ -2373,6 +2392,25 @@ select.field__input {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
+}
+/* Bonus tier (v2.4, SPEC 22): a pick past the Top 3. Same selected box, but
+ * a "+" glyph and a small tag distinguish it from a Top 3 "✓" pick. */
+.picker__item.is-bonus .picker__box {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.picker__tag {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 .picker__item-body {
   display: grid;

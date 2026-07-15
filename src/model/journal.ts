@@ -6,7 +6,13 @@ import { isHabitCheckedToday, localDayKey, streakAcrossCharts } from './completi
 import { isActionFilled, isWeeklyHabit } from './progress';
 import type { Action, Chart, DayPlan, Review } from './types';
 
-/** Structural cap on the number of MITs ("top 3 for today"). */
+/**
+ * The Top-3 boundary within `DayPlan.mits` (v2.4, SPEC 22). `mits` is ONE
+ * ordered array with no cap: the first `MAX_MITS` entries are the "top 3 for
+ * today" (MITs); anything after that is a bonus pick. Order is the only thing
+ * that encodes tier — unpicking a top-3 item lets the first bonus slide up
+ * for free, with no promotion logic needed.
+ */
 export const MAX_MITS = 3;
 
 /** Day plans older than this are pruned on write (SPEC 11.2). */
@@ -31,16 +37,16 @@ function pad2(n: number): string {
 // --- Validation with defaults (mirrors storage.ts's additive-field pattern) ---
 
 /**
- * Validate one DayPlan, defaulting every field. MITs are structurally capped at
- * MAX_MITS and only well-shaped `{chartId, actionId}` entries survive. Returns
- * null only when the value is not an object at all.
+ * Validate one DayPlan, defaulting every field. `mits` is uncapped (v2.4,
+ * SPEC 22) — only well-shaped `{chartId, actionId}` entries survive, in
+ * order, however many there are. Returns null only when the value is not an
+ * object at all.
  */
 export function validateDayPlan(v: unknown): DayPlan | null {
   if (!isRecord(v)) return null;
   const mits: Array<{ chartId: string; actionId: string }> = [];
   if (Array.isArray(v.mits)) {
     for (const m of v.mits) {
-      if (mits.length >= MAX_MITS) break;
       if (isRecord(m) && typeof m.chartId === 'string' && typeof m.actionId === 'string') {
         mits.push({ chartId: m.chartId, actionId: m.actionId });
       }
@@ -85,6 +91,18 @@ export function validateReviews(v: unknown): Record<string, Review> {
     if (review) out[key] = review;
   }
   return out;
+}
+
+// --- Top-3 / bonus split (v2.4, SPEC 22) --------------------------------------
+
+/**
+ * Split an ordered picks array into the Top 3 and the bonus rest. Pure: order
+ * is preserved within each half, nothing is mutated. Works on any ordered
+ * array of picks — callers pass raw `DayPlan.mits` refs or resolved rows,
+ * whichever they have on hand.
+ */
+export function splitPicks<T>(picks: readonly T[]): { top: T[]; bonus: T[] } {
+  return { top: picks.slice(0, MAX_MITS), bonus: picks.slice(MAX_MITS) };
 }
 
 // --- Day pruning --------------------------------------------------------------
