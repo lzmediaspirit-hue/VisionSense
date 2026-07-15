@@ -14,6 +14,7 @@ import {
   isWeeklySatisfied,
   MAX_MITS,
   pruneDays,
+  splitPicks,
   validateDayPlan,
   validateDays,
   validateReview,
@@ -42,15 +43,12 @@ describe('validateDayPlan / validateDays', () => {
     expect(validateDayPlan([1, 2])).toBeNull();
   });
 
-  it('caps mits at MAX_MITS, dropping the rest', () => {
+  it('does not cap mits — bonus picks beyond MAX_MITS survive, in order (v2.4)', () => {
     const mits = Array.from({ length: 6 }, (_, i) => ({ chartId: 'c', actionId: `a${i}` }));
     const plan = validateDayPlan({ mits, note: '', updatedAt: '2026-01-01T00:00:00.000Z' });
-    expect(plan?.mits).toHaveLength(MAX_MITS);
-    expect(plan?.mits).toEqual([
-      { chartId: 'c', actionId: 'a0' },
-      { chartId: 'c', actionId: 'a1' },
-      { chartId: 'c', actionId: 'a2' },
-    ]);
+    expect(plan?.mits.length).toBeGreaterThan(MAX_MITS);
+    expect(plan?.mits).toHaveLength(6);
+    expect(plan?.mits).toEqual(mits);
   });
 
   it('drops malformed mit entries but keeps well-formed ones', () => {
@@ -74,6 +72,31 @@ describe('validateDayPlan / validateDays', () => {
     expect(validateDays(null)).toEqual({});
     expect(validateDays('nope')).toEqual({});
     expect(validateDays([1, 2])).toEqual({});
+  });
+});
+
+describe('splitPicks', () => {
+  it('splits 0 picks into two empty arrays', () => {
+    expect(splitPicks([])).toEqual({ top: [], bonus: [] });
+  });
+
+  it('splits exactly MAX_MITS picks into all-top, no bonus', () => {
+    const picks = Array.from({ length: MAX_MITS }, (_, i) => String.fromCharCode(97 + i));
+    expect(picks).toEqual(['a', 'b', 'c']);
+    expect(splitPicks(picks)).toEqual({ top: ['a', 'b', 'c'], bonus: [] });
+  });
+
+  it('splits 5 picks into the first 3 top and the rest bonus, order preserved', () => {
+    const picks = ['a', 'b', 'c', 'd', 'e'];
+    expect(splitPicks(picks)).toEqual({ top: ['a', 'b', 'c'], bonus: ['d', 'e'] });
+  });
+
+  it('does not mutate the input array', () => {
+    const picks = ['a', 'b', 'c', 'd'];
+    const { top, bonus } = splitPicks(picks);
+    expect(picks).toEqual(['a', 'b', 'c', 'd']);
+    expect(top).not.toBe(picks);
+    expect(bonus).not.toBe(picks);
   });
 });
 

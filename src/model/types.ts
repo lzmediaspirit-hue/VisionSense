@@ -54,12 +54,15 @@ export interface Chart {
 
 /**
  * A single day's plan (v1.4, SPEC 11.2). Keyed in AppState.days by the LOCAL
- * day (YYYY-MM-DD). `mits` are "most important tasks" — references to actions in
- * any chart, structurally capped at 3. MIT completion is always DERIVED from the
+ * day (YYYY-MM-DD). `mits` are "most important tasks" — references to actions
+ * in any chart, ONE ordered array with no cap (v2.4, SPEC 22): the first 3
+ * entries are the "top 3 for today", every entry after that is a bonus pick.
+ * Order is the only thing that encodes tier, so unpicking a top-3 item slides
+ * the first bonus up automatically. MIT completion is always DERIVED from the
  * referenced action, never stored here.
  */
 export interface DayPlan {
-  mits: Array<{ chartId: string; actionId: string }>; // max 3
+  mits: Array<{ chartId: string; actionId: string }>; // ordered: first 3 = top picks, rest = bonus
   note: string; // the evening reflection ("What did I learn today?")
   updatedAt: string; // ISO — used for per-key LWW sync merge
 }

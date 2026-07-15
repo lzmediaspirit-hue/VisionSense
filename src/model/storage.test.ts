@@ -40,6 +40,21 @@ describe('storage', () => {
     expect(loadState(storage)).toEqual(state);
   });
 
+  // v2.4 (SPEC 22): bonus picks beyond the Top 3 are NOT clamped anywhere in
+  // the persistence path — the day-plan validation used by loadState pins
+  // this via journal.ts's validateDayPlan/validateDays.
+  it('round-trips a day plan with more than 3 mits (bonus picks) unclamped', () => {
+    const state = sampleState();
+    const mits = Array.from({ length: 5 }, (_, i) => ({ chartId: 'c', actionId: `a${i}` }));
+    state.days = {
+      '2026-07-15': { mits, note: '', updatedAt: '2026-07-15T00:00:00.000Z' },
+    };
+    saveState(state, storage);
+    const loaded = loadState(storage);
+    expect(loaded.days['2026-07-15'].mits).toHaveLength(5);
+    expect(loaded.days['2026-07-15'].mits).toEqual(mits);
+  });
+
   it('returns fresh empty state when nothing is stored', () => {
     expect(loadState(storage)).toEqual(createInitialState());
   });

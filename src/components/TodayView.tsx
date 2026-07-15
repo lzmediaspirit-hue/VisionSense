@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isHabitCheckedToday, localDayKey, streakAcrossCharts } from '../model/completions';
-import { dueHabitCount, isWeeklySatisfied, MAX_MITS, weekCompletions } from '../model/journal';
+import { dueHabitCount, isWeeklySatisfied, MAX_MITS, splitPicks, weekCompletions } from '../model/journal';
 import { setActionStatus, toggleHabitToday } from '../model/operations';
 import { findActionById, isActionDone, isActionFilled, isWeeklyHabit } from '../model/progress';
 import type { Action, Chart, DayPlan } from '../model/types';
@@ -149,7 +149,10 @@ export function TodayView({ onClose }: TodayViewProps) {
     [mutateChart],
   );
 
-  // Resolve MIT references to live actions, dropping dangling ones (SPEC 11.2).
+  // Resolve MIT references to live actions, dropping dangling ones (SPEC
+  // 11.2). Split into Top 3 / bonus AFTER resolving (v2.4, SPEC 22), so a
+  // dangling top pick never shrinks the top list while a bonus pick still
+  // exists to slide up.
   const mitRows = useMemo(() => {
     return plan.mits.flatMap((ref) => {
       const chart = charts.find((c) => c.id === ref.chartId);
@@ -159,6 +162,7 @@ export function TodayView({ onClose }: TodayViewProps) {
       return [{ chart, located }];
     });
   }, [plan.mits, charts]);
+  const { top: topMitRows, bonus: bonusMitRows } = useMemo(() => splitPicks(mitRows), [mitRows]);
 
   // Habits: every non-established, filled habit across all charts, split into
   // daily (weeklyTarget === 0) and weekly-cadence (weeklyTarget >= 1) rows
@@ -186,6 +190,43 @@ export function TodayView({ onClose }: TodayViewProps) {
   }, [charts]);
 
   const multiChart = charts.length > 1;
+
+  // Shared row renderer for the Top 3 / Bonus lists (v2.4, SPEC 22): identical
+  // completion behaviour, reward toasts, and cues either way.
+  const renderMitRow = useCallback(
+    ({ chart, located }: (typeof mitRows)[number]) => {
+      const { action, pillarIndex, actionIndex, pillar } = located;
+      const done = action.habit ? isHabitCheckedToday(action, today) : action.status === 'done';
+      const pillarName = pillar.name.trim() || 'Unnamed pillar';
+      return (
+        <li key={`${chart.id}:${action.id}`} className={`mit ${done ? 'is-done' : ''}`.trim()}>
+          <button
+            type="button"
+            className="mit__check"
+            aria-pressed={done}
+            aria-label={`${done ? 'Undo' : 'Complete'} “${action.text.trim() || 'action'}”`}
+            onClick={() => toggleComplete(chart.id, pillarIndex, actionIndex, action)}
+          >
+            <span aria-hidden="true">{done ? '✓' : ''}</span>
+          </button>
+          <div className="mit__body">
+            <span className="mit__text">{action.text.trim() || 'Untitled action'}</span>
+            {action.cue.trim() !== '' && (
+              <span className="mit__cue">
+                <span aria-hidden="true">⏱ </span>
+                {action.cue.trim()}
+              </span>
+            )}
+            <span className="mit__context">
+              {multiChart ? `${chartTitleOf(chart)} · ` : ''}
+              {pillarName}
+            </span>
+          </div>
+        </li>
+      );
+    },
+    [today, toggleComplete, multiChart],
+  );
 
   // Chart tabs (v2.1, SPEC 19): only meaningful with more than one chart. Each
   // tab's due-count badge is that chart's still-due habits today, independent
@@ -310,39 +351,15 @@ export function TodayView({ onClose }: TodayViewProps) {
             The 99% start their day without a plan. Pick the 3 actions that will make today count.
           </p>
         ) : (
-          <ul className="mit-list">
-            {mitRows.map(({ chart, located }) => {
-              const { action, pillarIndex, actionIndex, pillar } = located;
-              const done = action.habit ? isHabitCheckedToday(action, today) : action.status === 'done';
-              const pillarName = pillar.name.trim() || 'Unnamed pillar';
-              return (
-                <li key={`${chart.id}:${action.id}`} className={`mit ${done ? 'is-done' : ''}`.trim()}>
-                  <button
-                    type="button"
-                    className="mit__check"
-                    aria-pressed={done}
-                    aria-label={`${done ? 'Undo' : 'Complete'} “${action.text.trim() || 'action'}”`}
-                    onClick={() => toggleComplete(chart.id, pillarIndex, actionIndex, action)}
-                  >
-                    <span aria-hidden="true">{done ? '✓' : ''}</span>
-                  </button>
-                  <div className="mit__body">
-                    <span className="mit__text">{action.text.trim() || 'Untitled action'}</span>
-                    {action.cue.trim() !== '' && (
-                      <span className="mit__cue">
-                        <span aria-hidden="true">⏱ </span>
-                        {action.cue.trim()}
-                      </span>
-                    )}
-                    <span className="mit__context">
-                      {multiChart ? `${chartTitleOf(chart)} · ` : ''}
-                      {pillarName}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            <ul className="mit-list">{topMitRows.map(renderMitRow)}</ul>
+            {bonusMitRows.length > 0 && (
+              <div className="today__bonus">
+                <p className="today__bonus-title">Bonus</p>
+                <ul className="mit-list mit-list--bonus">{bonusMitRows.map(renderMitRow)}</ul>
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -525,7 +542,8 @@ export function TodayView({ onClose }: TodayViewProps) {
             if (exists) {
               mits = plan.mits.filter((m) => !(m.chartId === chartId && m.actionId === actionId));
             } else {
-              if (plan.mits.length >= MAX_MITS) return;
+              // No cap (v2.4, SPEC 22): picks beyond the Top 3 become bonus
+              // picks, appended in order — never disabled, never dropped.
               mits = [...plan.mits, { chartId, actionId }];
             }
             savePlan({ mits });
@@ -539,7 +557,12 @@ export function TodayView({ onClose }: TodayViewProps) {
   );
 }
 
-/** The MIT picker dialog: candidates grouped chart -> pillar, capped at 3 picks. */
+/**
+ * The MIT picker dialog: candidates grouped chart -> pillar, no cap on picks
+ * (v2.4, SPEC 22). The first `MAX_MITS` picks (by pick order) are the Top 3;
+ * everything after is a bonus pick — both are selectable, neither is ever
+ * disabled.
+ */
 function MitPicker({
   charts,
   mits,
@@ -576,7 +599,7 @@ function MitPicker({
   }, []);
 
   const candidates = useMemo(() => collectCandidates(charts), [charts]);
-  const atCap = mits.length >= MAX_MITS;
+  const { top: topPicks, bonus: bonusPicks } = useMemo(() => splitPicks(mits), [mits]);
 
   // Group by chart, then pillar, preserving order.
   const groups = useMemo(() => {
@@ -616,7 +639,9 @@ function MitPicker({
           </button>
         </div>
         <p className="modal__eyebrow">
-          {mits.length}/{MAX_MITS} chosen — the actions that will make today count.
+          {topPicks.length}/{MAX_MITS} top picks
+          {bonusPicks.length > 0 ? ` · ${bonusPicks.length} bonus` : ''} — the first {MAX_MITS} picks
+          are today&apos;s must-dos; pick as many more as you like as a bonus.
         </p>
 
         {candidates.length === 0 ? (
@@ -633,21 +658,21 @@ function MitPicker({
                     <p className="picker__pillar-name">{pillarName}</p>
                     <ul className="picker__list">
                       {items.map((c) => {
-                        const selected = mits.some(
+                        const pickIndex = mits.findIndex(
                           (m) => m.chartId === c.chartId && m.actionId === c.action.id,
                         );
-                        const disabled = !selected && atCap;
+                        const selected = pickIndex !== -1;
+                        const isBonus = selected && pickIndex >= MAX_MITS;
                         return (
                           <li key={c.action.id}>
                             <button
                               type="button"
-                              className={`picker__item ${selected ? 'is-selected' : ''}`.trim()}
+                              className={`picker__item ${selected ? 'is-selected' : ''} ${isBonus ? 'is-bonus' : ''}`.trim()}
                               aria-pressed={selected}
-                              disabled={disabled}
                               onClick={() => onToggle(c.chartId, c.action.id)}
                             >
                               <span className="picker__box" aria-hidden="true">
-                                {selected ? '✓' : ''}
+                                {isBonus ? '+' : selected ? '✓' : ''}
                               </span>
                               <span className="picker__item-body">
                                 <span className="picker__item-text">
@@ -657,6 +682,7 @@ function MitPicker({
                                   <span className="picker__item-cue">{c.action.cue.trim()}</span>
                                 )}
                               </span>
+                              {isBonus && <span className="picker__tag">Bonus</span>}
                             </button>
                           </li>
                         );

@@ -1445,3 +1445,99 @@ clipping at either width.
   regardless of how wide the panel actually was.
 - Legend and figcaption text (already HTML) were bumped from `--fs-meta`
   (11.52px, under the floor) to `--fs-cell` (12.48px).
+
+## 22. Bonus picks (v2.4)
+
+The Top 3 (11.2) stays the daily discipline — pick the actions that will make
+today count — but a user who wants to plan more than 3 things for the day
+shouldn't be blocked from doing so. v2.4 removes the hard cap on
+`DayPlan.mits` while keeping the Top 3 exactly as important as before: picks
+past the third are **bonus**, clearly lower-priority, but still one tap away
+from completion with the same reward toasts and cues as a Top 3 pick.
+
+### 22.1 Ordered-array semantics, no promotion logic
+
+`DayPlan.mits` stays ONE ordered array of `{ chartId, actionId }` — there is
+no second array, no `tier` field, no schema change. Order alone encodes tier:
+the first `MAX_MITS` (3) entries are the Top 3; every entry after that is a
+bonus pick. `journal.ts` exports a pure helper,
+`splitPicks<T>(picks: readonly T[]): { top: T[]; bonus: T[] }` (first 3 /
+rest, order preserved within each half), used identically by the picker (on
+raw `mits` refs, to compute each candidate's tier) and by the Today view (on
+resolved rows, to decide what renders where).
+
+Because tier is positional, **unpicking a Top-3 item needs no promotion
+logic**: removing an entry from the middle of the array automatically slides
+every later entry — including the first bonus pick — one slot earlier, and
+the next render's `splitPicks` puts it in `top` for free. This is a direct
+consequence of the ordered-array model, not a special case the code has to
+detect.
+
+`MAX_MITS` (still `3`, still exported from `journal.ts`) is repurposed as the
+Top-3 *boundary* rather than a cap: `validateDayPlan` no longer truncates
+`mits` at 3 — every well-shaped `{chartId, actionId}` entry in the stored
+array survives validation, in order, however many there are. Nothing else in
+the persistence path (storage.ts's `migrate`/`saveState`, or the per-day LWW
+merge in `journalMerge.ts`) ever clamped or needs to clamp `mits` — the whole
+array round-trips through save/load and through sync untouched. Dangling MIT
+references (deleted chart/action) are still silently dropped, but only at
+render time, same as before (11.2) — and critically, **resolve first, then
+split**: the Today view calls `splitPicks` on the resolved rows (after
+dangling refs are dropped), never on the raw `mits` array, so a dangling Top-3
+reference can't shrink the visible Top 3 while a bonus pick is available to
+take its place.
+
+### 22.2 Picker
+
+The MIT picker dialog (11.2) drops its at-cap `disabled` behavior entirely —
+every candidate action is always selectable, never disabled, regardless of
+how many are already picked. Selecting a candidate appends it to the end of
+`mits`; unselecting removes it from wherever it sits in the array (which is
+exactly what produces the slide-up in 22.1).
+
+Each candidate's tier is computed from its index in `mits`
+(`mits.findIndex(...)` against `MAX_MITS`) and shown on the item itself: a
+Top-3 pick keeps the existing "✓" in `.picker__box`; a bonus pick shows "+"
+instead, plus a small "Bonus" tag (`.picker__tag`) next to the item text. The
+counter line (`.modal__eyebrow`) reads `"X/3 top picks"`, plus
+`" · N bonus"` appended only when there is at least one bonus pick (`N` = 0
+omits the bonus clause entirely) — followed by a short explanation that the
+first 3 picks are the must-dos and any extra picks are a bonus. The dialog
+title and `aria-label` stay **exactly** `"Pick today's top 3"` (unchanged) —
+the Top 3 is still the headline feature; "bonus" is an addition on top of it,
+not a rename.
+
+### 22.3 Today view rendering
+
+The "Top 3 for today" section (11.2) is unchanged in its top half: it renders
+`splitPicks(resolvedRows).top`, i.e. exactly the first 3 resolved MIT rows,
+with the same `.mit-list` row markup, completion behavior, reward toasts, and
+cues as before.
+
+A new **Bonus** block renders directly underneath, inside the same section,
+only when `splitPicks(resolvedRows).bonus` is non-empty: a small muted
+subheading (`.today__bonus-title`, styled like the existing
+`.today__pillar-name` eyebrows) reading "Bonus", followed by another
+`.mit-list` (modifier class `.mit-list--bonus`) using the identical row
+component as the Top 3 list — same one-tap completion, same reward toasts,
+same cue display. Bonus rows are only visually de-emphasized while not yet
+done (`.mit-list--bonus .mit:not(.is-done)`: reduced opacity plus a muted left
+border); a completed bonus row looks exactly like a completed Top 3 row
+(`.is-done` styling is shared and takes over). The block is omitted entirely
+when there are no bonus picks — no empty "Bonus" heading with nothing under
+it.
+
+The section's existing empty state ("The 99% start their day without a
+plan...") is unchanged: it shows only when there are zero picks at all (Top 3
+AND bonus both empty), exactly as before. The "Pick top 3" / "Edit picks"
+button label logic on the section header is also unchanged.
+
+### 22.4 Compatibility
+
+No schema change, no migration: `schemaVersion` stays 1, and a pre-v2.4
+`DayPlan` with 0-3 `mits` behaves identically to before (an empty `bonus`
+array from `splitPicks`, so the Bonus block never renders for old data).
+Sync (11.4/20.2) needs no changes — the per-day whole-`DayPlan` LWW merge in
+`journalMerge.ts` already carries `mits` as an opaque array; it was never
+aware of the 3-cap and doesn't need to become aware of the bonus/Top-3 split
+either.
